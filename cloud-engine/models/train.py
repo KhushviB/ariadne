@@ -29,7 +29,7 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     print(f"Resuming from epoch {epoch} (loss: {loss:.4f})")
     return epoch, loss
 
-def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=4, lr=0.01):
+def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, lr=0.01):
     """Executes checkpoint-driven training loop for PanGNN."""
     if data_dir is None:
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))

@@ -37,29 +37,32 @@ class PGATConv(MessagePassing):
         edge_index: [2, num_edges]
         edge_attr: [num_edges, edge_dim] (e.g. population transition frequency)
         """
-        # Step 1: Project node features
-        h_nodes = self.W(x).view(-1, self.heads, self.out_channels) # [num_nodes, heads, out_channels]
+        # Step 1: Project node features (keep 2D for PyG propagate compatibility)
+        h_nodes = self.W(x) # [num_nodes, heads * out_channels]
         
         # Step 2: Run message passing
         out = self.propagate(edge_index, x=x, h_nodes=h_nodes, edge_attr=edge_attr)
         
-        # Step 3: Mean head aggregation
-        out = out.mean(dim=1)
+        # Step 3: Mean head aggregation (reshape and take mean over heads)
+        out = out.view(-1, self.heads, self.out_channels).mean(dim=1)
         
         # Step 4: Add self loop representation and apply non-linearity
-        h_self = self.W(x)
+        h_self = self.W(x).view(-1, self.heads, self.out_channels).mean(dim=1)
         out = out + h_self
         return F.elu(out)
 
     def message(self, x_j, h_nodes_i, h_nodes_j, edge_attr, index, ptr, size_i):
         """
         x_j: Source node raw features [num_edges, in_channels]
-        h_nodes_i: Target projected features [num_edges, heads, out_channels]
-        h_nodes_j: Source projected features [num_edges, heads, out_channels]
+        h_nodes_i: Target projected features [num_edges, heads * out_channels]
+        h_nodes_j: Source projected features [num_edges, heads * out_channels]
         edge_attr: Edge features (population frequency) [num_edges, edge_dim]
         """
+        # Reshape source/target projections back to 3D [num_edges, heads, out_channels]
+        h_nodes_i = h_nodes_i.view(-1, self.heads, self.out_channels)
+        h_nodes_j = h_nodes_j.view(-1, self.heads, self.out_channels)
+
         # Step 1: Concatenate source node features and topological edge features for message mapping
-        # Expand edge_attr to match nodes dims
         edge_feat = edge_attr.unsqueeze(1).repeat(1, self.heads, 1) # [num_edges, heads, edge_dim]
         x_j_expanded = x_j.unsqueeze(1).repeat(1, self.heads, 1)    # [num_edges, heads, in_channels]
         
@@ -68,7 +71,6 @@ class PGATConv(MessagePassing):
         msg = msg.view(-1, self.heads, self.out_channels)           # [num_edges, heads, out_channels]
 
         # Step 2: Compute structural attention coefficients (alpha)
-        # alpha = LeakyReLU(a^T * [h_i || h_j])
         alpha_input = torch.cat([h_nodes_i, h_nodes_j], dim=-1)     # [num_edges, heads, 2 * out_channels]
         alpha = (alpha_input * self.att).sum(dim=-1)                # [num_edges, heads]
         alpha = F.leaky_relu(alpha, 0.2)
