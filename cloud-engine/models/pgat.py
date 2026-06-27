@@ -62,12 +62,9 @@ class PGATConv(MessagePassing):
         h_nodes_i = h_nodes_i.view(-1, self.heads, self.out_channels)
         h_nodes_j = h_nodes_j.view(-1, self.heads, self.out_channels)
 
-        # Step 1: Concatenate source node features and topological edge features for message mapping
-        edge_feat = edge_attr.unsqueeze(1).repeat(1, self.heads, 1) # [num_edges, heads, edge_dim]
-        x_j_expanded = x_j.unsqueeze(1).repeat(1, self.heads, 1)    # [num_edges, heads, in_channels]
-        
-        msg_input = torch.cat([x_j_expanded, edge_feat], dim=-1)     # [num_edges, heads, in_channels + edge_dim]
-        msg = self.M(msg_input.view(-1, self.in_channels + self.edge_dim))
+        # Step 1: Concatenate features and project globally BEFORE head division
+        msg_input = torch.cat([x_j, edge_attr], dim=-1)             # [num_edges, in_channels + edge_dim]
+        msg = self.M(msg_input)                                     # [num_edges, heads * out_channels]
         msg = msg.view(-1, self.heads, self.out_channels)           # [num_edges, heads, out_channels]
 
         # Step 2: Compute structural attention coefficients (alpha)
@@ -79,7 +76,7 @@ class PGATConv(MessagePassing):
         alpha = softmax(alpha, index, ptr, num_nodes=size_i)        # [num_edges, heads]
         
         # Return message weighted by attention
-        return msg * alpha.unsqueeze(-1)
+        return msg * alpha.unsqueeze(-1)                            # [num_edges, heads, out_channels]
 
 
 class PanGNNModel(nn.Module):
