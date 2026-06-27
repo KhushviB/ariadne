@@ -35,6 +35,8 @@ interface SidebarProps {
   annotation: NodeAnnotation | null;
   logs: LogMessage[];
   clearLogs: () => void;
+  onImputeNode?: (nodeId: number) => void;
+  imputationResult?: any;
 }
 
 export default function Sidebar({
@@ -47,7 +49,9 @@ export default function Sidebar({
   selectedNode,
   annotation,
   logs,
-  clearLogs
+  clearLogs,
+  onImputeNode,
+  imputationResult
 }: SidebarProps) {
   return (
     <aside className="sidebar">
@@ -190,6 +194,42 @@ export default function Sidebar({
             ) : (
               <div style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '8px', textAlign: 'center' }}>
                 No pathogen / ClinVar annotations for this segment.
+              </div>
+            )}
+
+            {/* GNN Active Inference Button */}
+            <div style={{ marginTop: '16px', borderTop: '1px solid hsla(var(--text-muted)/0.3)', paddingTop: '16px' }}>
+              <button 
+                onClick={() => onImputeNode && onImputeNode(selectedNode.id)}
+                className="control-btn"
+                style={{ width: '100%', justifyContent: 'center', background: 'hsl(var(--accent-purple))', color: 'white', fontWeight: 'bold' }}
+              >
+                🔮 Run PanGNN Imputation
+              </button>
+            </div>
+
+            {/* Imputation Inference Results */}
+            {imputationResult && imputationResult.node_id === selectedNode.id && (
+              <div style={{ marginTop: '12px', background: 'hsla(var(--accent-purple)/0.1)', border: '1px solid hsla(var(--accent-purple)/0.3)', padding: '12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'hsl(var(--accent-purple))', fontWeight: 'bold' }}>
+                  PanGNN Imputation Result
+                </div>
+                <div className="annotation-row">
+                  <span className="annotation-lbl">Imputation Prob</span>
+                  <span className="annotation-val" style={{ color: 'hsl(var(--accent-purple))', fontWeight: 'bold' }}>
+                    {(imputationResult.imputation_probability * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="annotation-row">
+                  <span className="annotation-lbl">Phenotypic Risk</span>
+                  <span className="annotation-val" style={{ color: 'hsl(var(--accent-rose))', fontWeight: 'bold' }}>
+                    {imputationResult.phenotypic_risk_score.toFixed(2)}
+                  </span>
+                </div>
+                <div className="annotation-row" style={{ border: 'none' }}>
+                  <span className="annotation-lbl">Clinical Significance</span>
+                  <span className="annotation-val" style={{ color: 'white', fontWeight: 'bold' }}>{imputationResult.clinical_significance}</span>
+                </div>
               </div>
             )}
           </div>

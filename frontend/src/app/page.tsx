@@ -37,8 +37,12 @@ export default function Dashboard() {
   }, [logMessage]);
 
   // Fetch coordinates dynamically from remote API when available
+  const [imputationResult, setImputationResult] = useState<any>(null);
+
   useEffect(() => {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const apiBaseUrl = rawApiUrl.replace(/\/$/, ''); // Safely strip trailing slashes to avoid // double-slash 404s
+    
     if (!apiBaseUrl) {
       // Use local static mock data
       const chrData = mockGraphData.chromosomes[selectedChr as '21' | '22'];
@@ -103,10 +107,50 @@ export default function Dashboard() {
       });
   }, [selectedChr, selectedCohort, logMessage]);
 
+  // Run imputation inference
+  const handleImputeNode = useCallback((nodeId: number) => {
+    const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const apiBaseUrl = rawApiUrl.replace(/\/$/, '');
+    
+    if (!apiBaseUrl) {
+      // Return static mock result
+      logMessage(`Running simulated GNN Imputation for Node #${nodeId}...`, 'info');
+      setTimeout(() => {
+        const mockResult = {
+          node_id: nodeId,
+          imputation_probability: 0.965,
+          clinical_significance: "Likely Pathogenic",
+          phenotypic_risk_score: 3.12
+        };
+        setImputationResult(mockResult);
+        logMessage(`Imputation simulated: Prob 96.5% | Phenotypic Risk 3.12`, 'success');
+      }, 600);
+      return;
+    }
+
+    logMessage(`Triggering active GNN imputation prediction on Cloud for Node #${nodeId}...`, 'info');
+
+    fetch(`${apiBaseUrl}/api/impute?node_id=${nodeId}&chr_id=${selectedChr}`, {
+      method: 'POST'
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        setImputationResult(data);
+        logMessage(`GNN Active Imputation complete: Prob ${(data.imputation_probability * 100).toFixed(1)}% | Risk: ${data.phenotypic_risk_score.toFixed(2)}`, 'success');
+      })
+      .catch(err => {
+        logMessage(`Imputation failed: ${err.message}`, 'warning');
+      });
+  }, [selectedChr, logMessage]);
+
   // Handle chromosome changes
   const handleChrChange = (chr: string) => {
     setSelectedChr(chr);
     setSelectedNodeId(null); // Clear selected node
+    setImputationResult(null); // Clear imputation details
     logMessage(`Switched coordinate mapping viewport to Chromosome ${chr}.`, 'info');
   };
 
@@ -176,6 +220,8 @@ export default function Dashboard() {
           annotation={annotation}
           logs={logs}
           clearLogs={handleClearLogs}
+          onImputeNode={handleImputeNode}
+          imputationResult={imputationResult}
         />
       </main>
     </div>
