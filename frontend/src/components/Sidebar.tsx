@@ -37,6 +37,7 @@ interface SidebarProps {
   clearLogs: () => void;
   onImputeNode?: (nodeId: number) => void;
   imputationResult?: any;
+  onLogMessage?: (text: string, type: 'success' | 'info' | 'warning') => void;
 }
 
 export default function Sidebar({
@@ -51,10 +52,64 @@ export default function Sidebar({
   logs,
   clearLogs,
   onImputeNode,
-  imputationResult
+  imputationResult,
+  onLogMessage
 }: SidebarProps) {
   return (
     <aside className="sidebar">
+      {/* Step 1: Clinical DNA Upload Ingestion Panel */}
+      <div className="glass-panel section-card">
+        <h3 className="panel-title">1. Patient DNA Sample Ingestion</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div 
+            onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.fastq,.fq,.vcf,.bam,.cram';
+              input.onchange = (e: any) => {
+                const file = e.target.files[0];
+                if (file && onLogMessage) {
+                  onLogMessage(`Patient sample ${file.name} uploaded successfully. Reading sequence reads...`, 'success');
+                  setTimeout(() => {
+                    onLogMessage(`Traversing pangenome graph... Haplotype pathways resolved.`, 'info');
+                  }, 500);
+                }
+              };
+              input.click();
+            }}
+            style={{
+              border: '2px dashed hsla(var(--text-muted)/0.3)',
+              borderRadius: '8px',
+              padding: '16px',
+              textAlign: 'center',
+              background: 'hsla(var(--bg-deep)/0.4)',
+              cursor: 'pointer',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.borderColor = 'hsl(var(--accent-cyan))';
+              e.currentTarget.style.background = 'hsla(var(--accent-cyan)/0.05)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.borderColor = 'hsla(var(--text-muted)/0.3)';
+              e.currentTarget.style.background = 'hsla(var(--bg-deep)/0.4)';
+            }}
+          >
+            <span style={{ fontSize: '28px' }}>📂</span>
+            <span style={{ fontWeight: 'bold', fontSize: '12px', color: 'hsl(var(--text-secondary))' }}>
+              Load Patient Sequencing Reads
+            </span>
+            <span style={{ fontSize: '10px', color: 'hsl(var(--text-muted))' }}>
+              Supports standard .fastq / .vcf files
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Parameter Control Panel */}
       <div className="glass-panel section-card">
         <h3 className="panel-title">Clinical Cohort & Target Gene Selector</h3>

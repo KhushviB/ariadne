@@ -222,6 +222,7 @@ export default function Dashboard() {
           clearLogs={handleClearLogs}
           onImputeNode={handleImputeNode}
           imputationResult={imputationResult}
+          onLogMessage={logMessage}
         />
       </main>
     </div>
