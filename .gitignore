@@ -21,7 +21,7 @@ ENV/
 .pytest_cache/
 
 # Large Biological Datasets & Binary Graph Files (Cloud Ingest outputs)
-thesis-data/
+data/
 *.fa
 *.fa.gz
 *.vcf
@@ -37,3 +37,4 @@ thesis-data/
 .DS_Store
 Thumbs.db
 
+# Exclude local data, input documentation, and outputs
