@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Next.js build outputs
+.next/
+out/
+build/
+dist/
+
+# Python cache & environments
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+.pytest_cache/
+
+# Large Biological Datasets & Binary Graph Files (Cloud Ingest outputs)
+thesis-data/
+*.fa
+*.fa.gz
+*.vcf
+*.vcf.gz
+*.vg
+*.gfa
+*.pt
+*.pth
+
+# IDE and OS configurations
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
