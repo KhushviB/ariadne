@@ -1,13 +1,12 @@
 import os
+import sys
 import subprocess
 import urllib.request
+import argparse
 
-# Target Chromosome and Variant URLs
-CH21_REF_URL = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/chromosomes/chr21.fa.gz"
-CH22_REF_URL = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/chromosomes/chr22.fa.gz"
-
-CH21_VCF_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
-CH21_TBI_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz.tbi"
+# GIAB whole-genome variant references (chromosomes 1-22)
+VCF_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
+TBI_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz.tbi"
 
 def download_file(url, target_path):
     """Utility to stream biological data files down from public repositories."""
@@ -28,7 +27,6 @@ def download_file(url, target_path):
         return True
     except Exception as e:
         print(f"Warning: Failed to download {url} due to connection error: {str(e)}")
-        print("Pipeline will fall back to simulated mock structures for offline execution.")
         return False
 
 def run_command(cmd, shell=False):
@@ -42,121 +40,118 @@ def run_command(cmd, shell=False):
     return result.stdout
 
 def create_mock_gfa(target_path, chr_num):
-    """Writes a mock GFA structure to make the pipeline runnable offline."""
+    """Writes a simulated GFA structure to make the pipeline runnable offline."""
     print(f"Generating mock pangenome graph for Chromosome {chr_num} at {target_path}...")
-    gfa_content = (
-        "H\tVN:Z:1.0\n"
-        f"S\t1\tATGCGCTA\tLN:i:8\n"
-        f"S\t2\tCCGATAGC\tLN:i:8\n"
-        f"S\t3\tTTAATAAACCGGTT\tLN:i:14\n"
-        f"S\t4\tTTG\tLN:i:3\n"
-        f"S\t5\tGGCCTTAA\tLN:i:8\n"
-        "L\t1\t+\t2\t+\t0M\n"
-        "L\t2\t+\t3\t+\t0M\n"
-        "L\t2\t+\t4\t+\t0M\n"
-        "L\t3\t+\t5\t+\t0M\n"
-        "L\t4\t+\t5\t+\t0M\n"
-    )
+    
+    # We create slightly varying nodes and links to simulate different chromosome sizes
+    num_nodes = 60 + (int(chr_num) % 5) * 10
+    gfa_content = ["H\tVN:Z:1.0"]
+    
+    # Generate nodes
+    for i in range(1, num_nodes + 1):
+        # alternate structural slot markers
+        seq_len = 15 if i % 6 != 0 else 80
+        sequence = "A" * seq_len
+        gfa_content.append(f"S\t{i}\t{sequence}\tLN:i:{seq_len}")
+        
+    # Generate edges
+    for i in range(1, num_nodes):
+        gfa_content.append(f"L\t{i}\t+\t{i+1}\t+\t0M")
+        # Add some alternate pathways for structural slots
+        if i % 6 == 0 and i < num_nodes - 1:
+            gfa_content.append(f"L\t{i-1}\t+\t{i+1}\t+\t0M")
+            
     with open(target_path, 'w') as f:
-        f.write(gfa_content)
-    print("Mock GFA generation complete.")
+        f.write("\n".join(gfa_content) + "\n")
+    print(f"Mock GFA generated: {num_nodes} nodes written.")
 
-def assemble_pangenome_graphs(data_dir):
+def assemble_pangenome_graphs(data_dir, chromosomes):
     """
-    Downsamples genome references and constructs GFA graphs.
-    Uses real downloads if online, otherwise creates mock files.
+    Ingests reference sequences and variant files, constructing GFA graphs
+    for each requested chromosome. Falls back to mock graphs if offline.
     """
     os.makedirs(data_dir, exist_ok=True)
-
-    # Paths
-    ref_21 = os.path.join(data_dir, "chr21.fa.gz")
-    ref_22 = os.path.join(data_dir, "chr22.fa.gz")
     vcf_file = os.path.join(data_dir, "variants.vcf.gz")
     tbi_file = os.path.join(data_dir, "variants.vcf.gz.tbi")
     
-    gfa_21_path = os.path.join(data_dir, "chr21.gfa")
-    gfa_22_path = os.path.join(data_dir, "chr22.gfa")
-
-    # Try downloading files (including the tabix index .tbi)
-    success = download_file(CH21_REF_URL, ref_21)
-    if success:
-        download_file(CH22_REF_URL, ref_22)
-        download_file(CH21_VCF_URL, vcf_file)
-        download_file(CH21_TBI_URL, tbi_file)
+    # Download the shared whole-genome GIAB VCF index
+    vcf_success = download_file(VCF_URL, vcf_file)
+    tbi_success = download_file(TBI_URL, tbi_file)
+    
+    for chr_num in chromosomes:
+        print("\n" + "="*50)
+        print(f"Processing Chromosome {chr_num}...")
+        print("="*50)
         
-        try:
-            print("Extracting FASTA sequences...")
-            if not os.path.exists(os.path.join(data_dir, "chr21.fa")):
-                run_command(f"gunzip -c {ref_21} > {data_dir}/chr21.fa", shell=True)
-            if not os.path.exists(os.path.join(data_dir, "chr22.fa")):
-                run_command(f"gunzip -c {ref_22} > {data_dir}/chr22.fa", shell=True)
-
-            print("Constructing Chromosome graphs using vg construct...")
-            # Run vg construct with VCF variants and the downloaded tabix index
-            vg_21_out = run_command([
-                "vg", "construct",
-                "-r", os.path.join(data_dir, "chr21.fa"),
-                "-v", vcf_file,
-                "-R", "chr21",
-                "-p"
-            ], shell=False)
-            
-            # Save vg stdout graph to file
-            vg_21_path = os.path.join(data_dir, "chr21.vg")
-            with open(vg_21_path, 'wb') as f:
-                f.write(vg_21_out)
+        ref_url = f"http://hgdownload.cse.ucsc.edu/goldenPath/hg38/chromosomes/chr{chr_num}.fa.gz"
+        ref_path_gz = os.path.join(data_dir, f"chr{chr_num}.fa.gz")
+        ref_path_fa = os.path.join(data_dir, f"chr{chr_num}.fa")
+        gfa_path = os.path.join(data_dir, f"chr{chr_num}.gfa")
+        vg_path = os.path.join(data_dir, f"chr{chr_num}.vg")
+        
+        # Download reference chromosome FASTA
+        ref_success = download_file(ref_url, ref_path_gz)
+        
+        if vcf_success and tbi_success and ref_success:
+            try:
+                # Extract sequence
+                if not os.path.exists(ref_path_fa):
+                    print(f"Extracting Reference FASTA for Chromosome {chr_num}...")
+                    run_command(f"gunzip -c {ref_path_gz} > {ref_path_fa}", shell=True)
                 
-            # Convert vg graph to GFA layout
-            print("Converting Chromosome 21 vg graph to GFA format...")
-            gfa_21_out = run_command([
-                "vg", "view",
-                "-g", vg_21_path
-            ], shell=False)
-            
-            with open(gfa_21_path, 'wb') as f:
-                f.write(gfa_21_out)
-
-            # Repeat workflow for Chromosome 22
-            # Since the VCF is whole-genome 1..22, construct uses same VCF file filtered by region
-            print("Constructing Chromosome 22 graph...")
-            vg_22_out = run_command([
-                "vg", "construct",
-                "-r", os.path.join(data_dir, "chr22.fa"),
-                "-v", vcf_file,
-                "-R", "chr22",
-                "-p"
-            ], shell=False)
-            
-            vg_22_path = os.path.join(data_dir, "chr22.vg")
-            with open(vg_22_path, 'wb') as f:
-                f.write(vg_22_out)
+                # Construct graph
+                print(f"Running vg construct for Chromosome {chr_num}...")
+                vg_out = run_command([
+                    "vg", "construct",
+                    "-r", ref_path_fa,
+                    "-v", vcf_file,
+                    "-R", f"chr{chr_num}",
+                    "-p"
+                ], shell=False)
                 
-            print("Converting Chromosome 22 vg graph to GFA format...")
-            gfa_22_out = run_command([
-                "vg", "view",
-                "-g", vg_22_path
-            ], shell=False)
-            
-            with open(gfa_22_path, 'wb') as f:
-                f.write(gfa_22_out)
-
-            print("Real genome processing complete.")
-        except Exception as e:
-            print(f"Bioinformatics toolkit failure or incomplete files: {str(e)}")
-            print("Falling back to local graph simulation.")
-            create_mock_gfa(gfa_21_path, "21")
-            create_mock_gfa(gfa_22_path, "22")
-    else:
-        # Offline or connection error fallback
-        create_mock_gfa(gfa_21_path, "21")
-        create_mock_gfa(gfa_22_path, "22")
-
-    print(f"Assembly stage finished. Graphs ready in: {data_dir}")
+                with open(vg_path, 'wb') as f:
+                    f.write(vg_out)
+                    
+                # Convert to GFA
+                print(f"Converting vg graph to GFA for Chromosome {chr_num}...")
+                gfa_out = run_command([
+                    "vg", "view",
+                    "-g", vg_path
+                ], shell=False)
+                
+                with open(gfa_path, 'wb') as f:
+                    f.write(gfa_out)
+                
+                print(f"Chromosome {chr_num} GFA successfully assembled.")
+                continue
+            except Exception as e:
+                print(f"Warning: Failed to construct real graph for Chromosome {chr_num}: {e}")
+        
+        # Fallback to simulated biological graphs
+        print(f"Falling back to simulated GFA generation for Chromosome {chr_num}...")
+        create_mock_gfa(gfa_path, chr_num)
+        
+    print(f"\nAssembly process complete. Graphs saved in: {data_dir}")
 
 if __name__ == '__main__':
-    # Dynamically find the absolute workspace root/data directory
-    # Resolves to /ariadne/data/ regardless of current execution path
+    parser = argparse.ArgumentParser(description="Pangenome Data Ingestion Pipeline.")
+    parser.add_argument(
+        "--chromosomes", 
+        type=str, 
+        default="21,22", 
+        help="Comma-separated list of chromosomes to ingest (e.g. 21,22 or 1,2,21 or all)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Parse chromosome list
+    if args.chromosomes.lower() == 'all':
+        chroms = [str(i) for i in range(1, 23)]
+    else:
+        chroms = [c.strip() for c in args.chromosomes.split(',') if c.strip()]
+        
     root_data_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "data")
     )
-    assemble_pangenome_graphs(root_data_dir)
+    
+    assemble_pangenome_graphs(root_data_dir, chroms)

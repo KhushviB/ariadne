@@ -181,12 +181,29 @@ def read_root():
 @app.get("/api/chromosomes")
 def get_chromosomes():
     """Returns general chromosome indices available in the pangenome graph."""
-    return {
-        "chromosomes": [
+    chr_sizes = {
+        "1": 248900000, "2": 242100000, "3": 198200000, "4": 190200000,
+        "5": 181500000, "6": 170800000, "7": 159300000, "8": 145100000,
+        "9": 138300000, "10": 133700000, "11": 135000000, "12": 133200000,
+        "13": 114300000, "14": 107000000, "15": 101900000, "16": 90300000,
+        "17": 83200000, "18": 80300000, "19": 58600000, "20": 64400000,
+        "21": 46700000, "22": 50800000
+    }
+    available = []
+    if GFA_DATA:
+        for cid in sorted(GFA_DATA.keys(), key=lambda x: int(x) if x.isdigit() else 99):
+            available.append({
+                "id": cid,
+                "name": f"Chromosome {cid}",
+                "base_pairs": chr_sizes.get(cid, 50000000)
+            })
+    else:
+        # Initial boot fallback
+        available = [
             {"id": "21", "name": "Chromosome 21", "base_pairs": 46700000},
             {"id": "22", "name": "Chromosome 22", "base_pairs": 50800000}
         ]
-    }
+    return {"chromosomes": available}
 
 @app.get("/api/subgraph", response_model=GraphCoordinatePayload)
 def get_subgraph(
