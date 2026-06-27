@@ -271,10 +271,7 @@ export default function Visualizer3D({
 
       if (!sourceNode || !targetNode) return;
 
-      const inCohort = selectedCohort === 'all' || edge.cohorts.includes(selectedCohort);
-      if (!inCohort) return;
-
-      let color = 0xcbd5e1; // Default soft slate
+      let color = 0x94a3b8; // Default soft slate
       let thickness = 0.02; // Thin sleek fiber-optic baseline
       let opacity = 0.45;
 
@@ -293,22 +290,53 @@ export default function Visualizer3D({
           opacity = 0.4;
         }
       } else {
-        if (edge.cohorts.includes('African') && selectedCohort === 'African') {
-          color = 0x10b981; // Emerald
-          thickness = 0.05;
-          opacity = 0.8;
-        } else if (edge.cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
-          color = 0xf59e0b; // Amber
-          thickness = 0.05;
-          opacity = 0.8;
-        } else if (edge.cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
-          color = 0x8b5cf6; // Purple
-          thickness = 0.05;
-          opacity = 0.8;
-        } else if (edge.cohorts.includes('European') && selectedCohort === 'European') {
-          color = 0x0ea5e9; // Sky blue
-          thickness = 0.05;
-          opacity = 0.8;
+        // Multi-colored cohort ribbons in global view
+        if (selectedCohort === 'all') {
+          if (edge.cohorts.includes('African')) {
+            color = 0x10b981; // Green
+            thickness = 0.035;
+            opacity = 0.7;
+          } else if (edge.cohorts.includes('Ashkenazi')) {
+            color = 0xf59e0b; // Amber
+            thickness = 0.035;
+            opacity = 0.7;
+          } else if (edge.cohorts.includes('East_Asian')) {
+            color = 0x8b5cf6; // Purple
+            thickness = 0.035;
+            opacity = 0.7;
+          } else if (edge.cohorts.includes('European')) {
+            color = 0x0ea5e9; // Sky Blue
+            thickness = 0.035;
+            opacity = 0.7;
+          } else {
+            color = 0x94a3b8; // Global Slate
+            thickness = 0.02;
+            opacity = 0.45;
+          }
+        } else {
+          // Highlight selected cohort paths, fade others out to thin background threads
+          if (edge.cohorts.includes('African') && selectedCohort === 'African') {
+            color = 0x10b981; // Emerald
+            thickness = 0.06;
+            opacity = 0.85;
+          } else if (edge.cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
+            color = 0xf59e0b; // Amber
+            thickness = 0.06;
+            opacity = 0.85;
+          } else if (edge.cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
+            color = 0x8b5cf6; // Purple
+            thickness = 0.06;
+            opacity = 0.85;
+          } else if (edge.cohorts.includes('European') && selectedCohort === 'European') {
+            color = 0x0ea5e9; // Sky blue
+            thickness = 0.06;
+            opacity = 0.85;
+          } else {
+            // Keep background edges extremely thin and translucent (helps visual depth)
+            color = 0xcbd5e1;
+            thickness = 0.01;
+            opacity = 0.15;
+          }
         }
       }
 
@@ -422,31 +450,31 @@ export default function Visualizer3D({
         border: '1px solid #cbd5e1'
       }}>
         <div style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '10.5px', color: 'hsl(var(--text-secondary))', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
-          🧬 Pangenome Graph Map Legend
+          🧬 Pangenome Haplotype Legend
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '16px', height: '6px', borderRadius: '3px', background: '#94a3b8', opacity: 0.4 }} />
-          <span><strong>Linear Reference:</strong> GRCh38 DNA Double Helix backbone</span>
+          <span><strong>Linear Reference (GRCh38):</strong> Canonical chromosome coordinate backbone</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#0ea5e9' }} />
-          <span><strong>Reference Block:</strong> Conserved sequence segment</span>
+          <span><strong>Conserved Reference:</strong> Intact conserved sequence pathway</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#10b981' }} />
-          <span><strong>Insertion Block:</strong> Added sequence track (SV &ge; 50bp)</span>
+          <span><strong>Alternate Insertion:</strong> Added sequence track (SV &ge; 50bp)</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#ef4444' }} />
-          <span><strong>Deletion Block:</strong> Deleted sequence track (SV &ge; 50bp)</span>
+          <span><strong>Alternate Deletion:</strong> Deleted sequence track (SV &ge; 50bp)</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#8b5cf6' }} />
-          <span><strong>Polymorphic Block:</strong> Hypervariable segment</span>
+          <span><strong>Polymorphic Locus:</strong> Hypervariable genetic region</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #e2e8f0', paddingTop: '4px', marginTop: '2px' }}>
           <div style={{ width: '16px', height: '4px', background: 'linear-gradient(90deg, #0ea5e9, #ec4899)' }} />
-          <span><strong>Edge Weight:</strong> Thickness reflects GNN Attention ($\alpha$)</span>
+          <span><strong>Diagnostic Weights:</strong> Line thickness reflects path significance</span>
         </div>
       </div>
     </div>

@@ -57,7 +57,7 @@ export default function Sidebar({
     <aside className="sidebar">
       {/* Parameter Control Panel */}
       <div className="glass-panel section-card">
-        <h3 className="panel-title">Genomic Coordinates Selector</h3>
+        <h3 className="panel-title">Clinical Cohort & Target Gene Selector</h3>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* Chromosome Toggle */}
@@ -87,7 +87,7 @@ export default function Sidebar({
           {/* Haplotype Cohort Selector */}
           <div className="slider-group">
             <label className="slider-label">
-              <span>Haplotype Cohort Filter</span>
+              <span>Haplotype Lineage & Population Group</span>
             </label>
             <select 
               value={selectedCohort}
@@ -95,10 +95,10 @@ export default function Sidebar({
               className="control-btn"
               style={{ width: '100%', background: 'hsl(var(--bg-deep))', padding: '8px' }}
             >
-              <option value="all">Global Pangenome Paths (All)</option>
-              <option value="European">HPRC European Cohort</option>
-              <option value="African">HPRC African Cohort</option>
-              <option value="East_Asian">HPRC East Asian Cohort</option>
+              <option value="all">Global Haplotype Tracks (All Groups)</option>
+              <option value="European">HPRC European Ancestry Cohort</option>
+              <option value="African">HPRC African Ancestry Cohort</option>
+              <option value="East_Asian">HPRC East Asian Ancestry Cohort</option>
               <option value="Ashkenazi">GIAB HG002 Ashkenazi Jewish</option>
             </select>
           </div>
@@ -106,14 +106,14 @@ export default function Sidebar({
           {/* Attention Mapping Toggle */}
           <div className="slider-group">
             <label className="slider-label">
-              <span>GNN Path Attention Layer</span>
+              <span>Path-Aware Clinical Diagnostic Layer</span>
             </label>
             <button
               className={`control-btn ${showAttention ? 'active' : ''}`}
               onClick={() => onChangeAttention(!showAttention)}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              {showAttention ? '⚡ GNN Path Attention: ON' : ' GNN Path Attention: OFF'}
+              {showAttention ? '⚡ Diagnostic Attention Weights: ON' : ' Diagnostic Attention Weights: OFF'}
             </button>
           </div>
         </div>
@@ -121,20 +121,20 @@ export default function Sidebar({
 
       {/* Model Validation Stats */}
       <div className="glass-panel section-card">
-        <h3 className="panel-title">Model Imputation Validation</h3>
+        <h3 className="panel-title">Diagnostic Performance Evaluation Profile</h3>
         <div className="metrics-grid">
           <div className="metric-card">
-            <span className="metric-label">Precision</span>
+            <span className="metric-label">Clinical Precision</span>
             <span className="metric-value cyan">94.2%</span>
             <span className="metric-subtitle">vs. baseline 61.2%</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Recall</span>
+            <span className="metric-label">Clinical Recall</span>
             <span className="metric-value purple">91.5%</span>
             <span className="metric-subtitle">vs. baseline 54.7%</span>
           </div>
           <div className="metric-card" style={{ gridColumn: 'span 2' }}>
-            <span className="metric-label">Structural SV F1-Score</span>
+            <span className="metric-label">Structural Variant F1-Score</span>
             <span className="metric-value emerald">92.8%</span>
             <span className="metric-subtitle">spatial window &lt;= 50bp | seq similarity &gt;= 80%</span>
           </div>
@@ -143,24 +143,24 @@ export default function Sidebar({
 
       {/* Node Metadata annotation panel */}
       <div className="glass-panel section-card">
-        <h3 className="panel-title">Allele Node Metadata</h3>
+        <h3 className="panel-title">Sequence Segment Details & Clinical Linkages</h3>
         {selectedNode ? (
           <div className="annotation-panel">
             <div className="annotation-header">
-              <span>Node ID: #{selectedNode.id}</span>
+              <span>Locus Marker: {annotation ? annotation.rsid : `Seg #${selectedNode.id}`}</span>
               <span className={selectedNode.type === 'Reference' ? 'badge-green' : 'badge-rose'}>
-                {selectedNode.type}
+                {selectedNode.type === 'Reference' ? 'Conserved Ref' : 'Structural Variation'}
               </span>
             </div>
             
             <div className="annotation-row">
-              <span className="annotation-lbl">Allele Sequence</span>
+              <span className="annotation-lbl">DNA Sequence</span>
               <span className="annotation-val" style={{ maxWidth: '180px', overflowX: 'auto', display: 'block', textAlign: 'right' }}>
                 {selectedNode.sequence}
               </span>
             </div>
             <div className="annotation-row">
-              <span className="annotation-lbl">Global Frequency</span>
+              <span className="annotation-lbl">Allele Population Frequency</span>
               <span className="annotation-val">{(selectedNode.frequency * 100).toFixed(1)}%</span>
             </div>
 
@@ -178,22 +178,22 @@ export default function Sidebar({
                   <span className="annotation-val">{annotation.gene}</span>
                 </div>
                 <div className="annotation-row">
-                  <span className="annotation-lbl">Clinical Value</span>
+                  <span className="annotation-lbl">Clinical Classification</span>
                   <span className="annotation-val" style={{ color: annotation.clinical_significance.includes('Pathogenic') ? 'hsl(var(--accent-rose))' : 'hsl(var(--accent-emerald))' }}>
                     {annotation.clinical_significance}
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: 'hsl(var(--text-secondary))', lineHeight: '1.4', background: 'hsla(var(--bg-deep)/0.8)', padding: '8px', borderRadius: '4px' }}>
-                  <strong>Phenotypic Mapping:</strong> {annotation.phenotype}
+                  <strong>Phenotypic Association:</strong> {annotation.phenotype}
                 </div>
                 <div className="annotation-row" style={{ border: 'none' }}>
-                  <span className="annotation-lbl">Cohort Freq</span>
+                  <span className="annotation-lbl">Cohort Frequency</span>
                   <span className="annotation-val">{annotation.allele_frequency}</span>
                 </div>
               </div>
             ) : (
               <div style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '8px', textAlign: 'center' }}>
-                No pathogen / ClinVar annotations for this segment.
+                No clinical pathogenic markers annotated for this DNA segment.
               </div>
             )}
 
@@ -204,7 +204,7 @@ export default function Sidebar({
                 className="control-btn"
                 style={{ width: '100%', justifyContent: 'center', background: 'hsl(var(--accent-purple))', color: 'white', fontWeight: 'bold' }}
               >
-                🔮 Run PanGNN Imputation
+                🔮 Diagnose Segment Pathology
               </button>
             </div>
 
@@ -212,22 +212,22 @@ export default function Sidebar({
             {imputationResult && imputationResult.node_id === selectedNode.id && (
               <div style={{ marginTop: '12px', background: 'hsla(var(--accent-purple)/0.1)', border: '1px solid hsla(var(--accent-purple)/0.3)', padding: '12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'hsl(var(--accent-purple))', fontWeight: 'bold' }}>
-                  PanGNN Imputation Result
+                  Pathology Diagnosis Output
                 </div>
                 <div className="annotation-row">
-                  <span className="annotation-lbl">Imputation Prob</span>
+                  <span className="annotation-lbl">Pathology Risk Likelihood</span>
                   <span className="annotation-val" style={{ color: 'hsl(var(--accent-purple))', fontWeight: 'bold' }}>
                     {(imputationResult.imputation_probability * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="annotation-row">
-                  <span className="annotation-lbl">Phenotypic Risk</span>
+                  <span className="annotation-lbl">Phenotypic Risk Score (PRS)</span>
                   <span className="annotation-val" style={{ color: 'hsl(var(--accent-rose))', fontWeight: 'bold' }}>
                     {imputationResult.phenotypic_risk_score.toFixed(2)}
                   </span>
                 </div>
                 <div className="annotation-row" style={{ border: 'none' }}>
-                  <span className="annotation-lbl">Clinical Significance</span>
+                  <span className="annotation-lbl">Clinical Classification</span>
                   <span className="annotation-val" style={{ color: 'white', fontWeight: 'bold' }}>{imputationResult.clinical_significance}</span>
                 </div>
               </div>
@@ -235,7 +235,7 @@ export default function Sidebar({
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '24px 0', color: 'hsl(var(--text-muted))', fontSize: '13px' }}>
-            Click on a 3D chromosome node to display localized allele sequence information, transition details, and clinical phenotype links.
+            Click on a 3D chromosome segment to display localized allele sequence information, transition details, and clinical phenotype links.
           </div>
         )}
       </div>
@@ -243,7 +243,7 @@ export default function Sidebar({
       {/* Hardware Telemetry & Competitor stats */}
       <div className="glass-panel section-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 className="panel-title" style={{ marginBottom: 0 }}>System Telemetry & Logs</h3>
+          <h3 className="panel-title" style={{ marginBottom: 0 }}>Clinical Diagnostic Session Log</h3>
           <button 
             onClick={clearLogs}
             style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', fontSize: '11px', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}

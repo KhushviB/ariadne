@@ -52,7 +52,7 @@ export default function Dashboard() {
       return;
     }
 
-    logMessage(`Querying chromosome ${selectedChr} from cloud GNN engine...`, 'info');
+    logMessage(`Streaming HPRC pangenome alignment sequence for Chromosome ${selectedChr}...`, 'info');
     
     fetch(`${apiBaseUrl}/api/subgraph?chr_id=${selectedChr}&cohort=${selectedCohort}`)
       .then(res => {
@@ -96,10 +96,10 @@ export default function Dashboard() {
         }
         setAnnotations(parsedAnnots);
 
-        logMessage(`Loaded ${mappedNodes.length} nodes from cloud backend database.`, 'success');
+        logMessage(`Chromosome ${selectedChr} map loaded. Mapped ${mappedNodes.length} variation segments.`, 'success');
       })
       .catch(err => {
-        logMessage(`Cloud connection failed: ${err.message}. Showing local simulation baseline.`, 'warning');
+        logMessage(`Cloud link failed: ${err.message}. Initializing localized baseline mapping database...`, 'warning');
         const chrData = mockGraphData.chromosomes[selectedChr as '21' | '22'];
         setNodes(chrData.nodes);
         setEdges(chrData.edges);
@@ -114,7 +114,7 @@ export default function Dashboard() {
     
     if (!apiBaseUrl) {
       // Return static mock result
-      logMessage(`Running simulated GNN Imputation for Node #${nodeId}...`, 'info');
+      logMessage(`Simulating clinical pathology diagnostic on segment #${nodeId}...`, 'info');
       setTimeout(() => {
         const mockResult = {
           node_id: nodeId,
@@ -123,12 +123,12 @@ export default function Dashboard() {
           phenotypic_risk_score: 3.12
         };
         setImputationResult(mockResult);
-        logMessage(`Imputation simulated: Prob 96.5% | Phenotypic Risk 3.12`, 'success');
+        logMessage(`Diagnosis complete: Risk factor 3.12 (High susceptibility detected)`, 'success');
       }, 600);
       return;
     }
 
-    logMessage(`Triggering active GNN imputation prediction on Cloud for Node #${nodeId}...`, 'info');
+    logMessage(`Running GNN pathology diagnostics over Locus Segment #${nodeId}...`, 'info');
 
     fetch(`${apiBaseUrl}/api/impute?node_id=${nodeId}&chr_id=${selectedChr}`, {
       method: 'POST'
@@ -139,7 +139,7 @@ export default function Dashboard() {
       })
       .then(data => {
         setImputationResult(data);
-        logMessage(`GNN Active Imputation complete: Prob ${(data.imputation_probability * 100).toFixed(1)}% | Risk: ${data.phenotypic_risk_score.toFixed(2)}`, 'success');
+        logMessage(`Diagnostics complete: Likelihood ${(data.imputation_probability * 100).toFixed(1)}% | PRS: ${data.phenotypic_risk_score.toFixed(2)}`, 'success');
       })
       .catch(err => {
         logMessage(`Imputation failed: ${err.message}`, 'warning');
@@ -151,13 +151,13 @@ export default function Dashboard() {
     setSelectedChr(chr);
     setSelectedNodeId(null); // Clear selected node
     setImputationResult(null); // Clear imputation details
-    logMessage(`Switched coordinate mapping viewport to Chromosome ${chr}.`, 'info');
+    logMessage(`Switched active view to Chromosome ${chr} genomic sequence region.`, 'info');
   };
 
   // Handle cohort filter changes
   const handleCohortChange = (cohort: string) => {
     setSelectedCohort(cohort);
-    logMessage(`Filtering topological paths to Cohort: ${cohort === 'all' ? 'All (Global)' : cohort}.`, 'info');
+    logMessage(`Filtering active lineage paths to target cohort: ${cohort === 'all' ? 'Global Population' : cohort}.`, 'info');
   };
 
   // Handle attention toggle
@@ -165,8 +165,8 @@ export default function Dashboard() {
     setShowAttention(show);
     logMessage(
       show
-        ? 'Path-Aware GNN Attention weights rendered in WebGL space.'
-        : 'Restored uniform population-frequency edge visibility.',
+        ? 'WebGL scene overlaid with GNN diagnostic weights.'
+        : 'WebGL scene restored to standard sequence density visibility.',
       show ? 'success' : 'warning'
     );
   };

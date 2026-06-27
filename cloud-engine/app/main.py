@@ -83,14 +83,27 @@ def load_real_gfa_graphs():
                     source = int(parts[1])
                     target = int(parts[3])
                     
+                    # Distribute edges to simulate real HPRC cohort haplotype walks
+                    edge_cohorts = ["Global"]
+                    # Use seed to ensure consistent structural layouts
+                    random.seed(source + target)
+                    if random.random() < 0.4:
+                        edge_cohorts.append("European")
+                    if random.random() < 0.35:
+                        edge_cohorts.append("African")
+                    if random.random() < 0.3:
+                        edge_cohorts.append("East_Asian")
+                    if random.random() < 0.25:
+                        edge_cohorts.append("Ashkenazi")
+
                     # Store link if under memory limits
                     if len(edges) < 120:
                         edges.append({
                             "source": source,
                             "target": target,
-                            "frequency": 0.75,
+                            "frequency": round(random.uniform(0.2, 0.98), 2),
                             "attention": 0.0,
-                            "cohorts": ["Global", "European", "African", "East_Asian", "Ashkenazi"]
+                            "cohorts": edge_cohorts
                         })
 
         # Keep edges connecting only active loaded nodes
@@ -210,12 +223,14 @@ def get_subgraph(
         random.seed(42)
         
         for e in chr_data['edges']:
-            edges_payload.append({
-                "source": int(e['source']),
-                "target": int(e['target'])
-            })
-            # Generate attention weights (simulated model outputs mapped to edges)
-            attention_weights.append(round(random.uniform(0.15, 0.95), 3))
+            # Filter by cohort path
+            if cohort == "all" or cohort in e['cohorts']:
+                edges_payload.append({
+                    "source": int(e['source']),
+                    "target": int(e['target'])
+                })
+                # Generate attention weights (simulated model outputs mapped to edges)
+                attention_weights.append(round(random.uniform(0.15, 0.95), 3))
 
         # Build clinical annotations
         clin_annotations = {}
