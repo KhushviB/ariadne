@@ -5,7 +5,7 @@ import urllib.request
 # Target Chromosome URLs
 CH21_REF_URL = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/chromosomes/chr21.fa.gz"
 CH22_REF_URL = "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/chromosomes/chr22.fa.gz"
-CH21_VCF_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/latest/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
+CH21_VCF_URL = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh38/HG002_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
 
 def download_file(url, target_path):
     """Utility to stream biological data files down from public repositories."""
