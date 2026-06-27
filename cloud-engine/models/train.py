@@ -36,27 +36,25 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=4, lr=0
     if checkpoint_dir is None:
         checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
 
-    gfa_21 = os.path.join(data_dir, "chr21.gfa")
-    gfa_22 = os.path.join(data_dir, "chr22.gfa")
+    import glob
+    gfa_files = glob.glob(os.path.join(data_dir, "*.gfa"))
 
     all_nodes = []
     all_edges = []
 
-    if os.path.exists(gfa_21) and os.path.exists(gfa_22):
-        print(f"Parsing biological graphs in {data_dir} for GNN training...")
+    if gfa_files:
+        print(f"Detected {len(gfa_files)} GFA files in {data_dir}. Parsing graphs for GNN training...")
         import sys
         sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data-pipeline")))
         from parse_gfa import parse_gfa
         
-        nodes_21, edges_21 = parse_gfa(gfa_21)
-        nodes_22, edges_22 = parse_gfa(gfa_22)
-        
-        all_nodes.extend(nodes_21)
-        all_nodes.extend(nodes_22)
-        all_edges.extend(edges_21)
-        all_edges.extend(edges_22)
+        for gfa_path in gfa_files:
+            print(f"Parsing biological GFA graph: {os.path.basename(gfa_path)}...")
+            nodes, edges = parse_gfa(gfa_path)
+            all_nodes.extend(nodes)
+            all_edges.extend(edges)
     else:
-        raise FileNotFoundError(f"GFA graph files not found in {data_dir}. Please run data-pipeline/ingest.py first.")
+        raise FileNotFoundError(f"No GFA graph files (*.gfa) found in {data_dir}. Please run data-pipeline/ingest.py first.")
 
     # 2. Build dataset and loader
     ds = PangenomeDataset()
