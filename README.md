@@ -68,7 +68,7 @@ python cloud-engine/benchmarking/statistics.py
 
 Once local simulation and code layout adjustments are validated:
 1.  Push the monorepo workspace to GitHub.
-2.  Clone the repository on a remote GPU container (equipped with NVIDIA A100/H100 or similar cloud GPU cores).
+2.  Clone the repository on a remote GPU container
 3.  Deploy the environment using Docker:
     ```bash
     docker build -t pangnn-engine ./cloud-engine

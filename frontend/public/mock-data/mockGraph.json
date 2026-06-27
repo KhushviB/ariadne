@@ -1,0 +1,111 @@
+{
+  "chromosomes": {
+    "21": {
+      "name": "Chromosome 21 Locus",
+      "coordinate_range": "21q22.3 (BRCA2 mapping homolog)",
+      "base_pairs": 46700000,
+      "nodes": [
+        {"id": 1, "x": -25.0, "y": 0.0, "z": 0.0, "sequence": "ATGCGCTA", "type": "Reference", "frequency": 1.0},
+        {"id": 2, "x": -15.0, "y": 0.0, "z": 0.0, "sequence": "CCGATAGC", "type": "Reference", "frequency": 0.95},
+        {"id": 3, "x": -5.0, "y": 2.5, "z": 1.2, "sequence": "TTAATAAACCGGTT", "type": "Insertion (SV >= 50bp)", "frequency": 0.35},
+        {"id": 4, "x": -5.0, "y": -2.5, "z": -1.2, "sequence": "TTG", "type": "Deletion (SV >= 50bp)", "frequency": 0.60},
+        {"id": 5, "x": 5.0, "y": 0.0, "z": 0.0, "sequence": "GGCCTTAA", "type": "Reference", "frequency": 0.98},
+        {"id": 6, "x": 15.0, "y": 3.0, "z": -2.0, "sequence": "TAGCATGCTAGCTAGCTAGC", "type": "Novel Translocation", "frequency": 0.08},
+        {"id": 7, "x": 15.0, "y": 0.0, "z": 0.0, "sequence": "AACCGGTT", "type": "Reference", "frequency": 0.90},
+        {"id": 8, "x": 25.0, "y": 0.0, "z": 0.0, "sequence": "TTGGCCAA", "type": "Reference", "frequency": 1.0}
+      ],
+      "edges": [
+        {"source": 1, "target": 2, "frequency": 0.95, "attention": 0.12, "cohorts": ["European", "African", "East_Asian", "Ashkenazi"]},
+        {"source": 2, "target": 3, "frequency": 0.35, "attention": 0.89, "cohorts": ["African", "Ashkenazi"]},
+        {"source": 2, "target": 4, "frequency": 0.60, "attention": 0.67, "cohorts": ["European", "East_Asian"]},
+        {"source": 3, "target": 5, "frequency": 0.98, "attention": 0.92, "cohorts": ["African", "Ashkenazi"]},
+        {"source": 4, "target": 5, "frequency": 0.99, "attention": 0.45, "cohorts": ["European", "East_Asian"]},
+        {"source": 5, "target": 6, "frequency": 0.08, "attention": 0.97, "cohorts": ["Ashkenazi"]},
+        {"source": 5, "target": 7, "frequency": 0.90, "attention": 0.15, "cohorts": ["European", "African", "East_Asian"]},
+        {"source": 6, "target": 8, "frequency": 1.00, "attention": 0.84, "cohorts": ["Ashkenazi"]},
+        {"source": 7, "target": 8, "frequency": 1.00, "attention": 0.10, "cohorts": ["European", "African", "East_Asian"]}
+      ],
+      "clinical_annotations": {
+        "node_3": {
+          "rsid": "rs11223405",
+          "gene": "BRCA2 (homolog)",
+          "clinical_significance": "Pathogenic / Likely Pathogenic",
+          "phenotype": "Increased susceptibility to Breast-Ovarian Cancer, Familial, 2",
+          "review_status": "criteria provided, multiple submitters, no conflicts",
+          "allele_frequency": "0.351 (HPRC-African)"
+        },
+        "node_4": {
+          "rsid": "rs882194",
+          "gene": "BRCA2 (homolog)",
+          "clinical_significance": "Benign",
+          "phenotype": "None / Non-disease associated transition",
+          "review_status": "reviewed by expert panel",
+          "allele_frequency": "0.598 (HPRC-European)"
+        },
+        "node_6": {
+          "rsid": "rs3394857",
+          "gene": "USP25 (structural flank)",
+          "clinical_significance": "Drug Resistance / Pharmacogenomic Risk",
+          "phenotype": "Impaired response to oncology therapeutic agent cyclophosphamide",
+          "review_status": "single submitter",
+          "allele_frequency": "0.076 (GIAB-HG002)"
+        }
+      }
+    },
+    "22": {
+      "name": "Chromosome 22 Locus",
+      "coordinate_range": "22q11.21 (DiGeorge Syndrome hypervariable region)",
+      "base_pairs": 50800000,
+      "nodes": [
+        {"id": 201, "x": -30.0, "y": 0.0, "z": 0.0, "sequence": "CCGATTAC", "type": "Reference", "frequency": 1.0},
+        {"id": 202, "x": -20.0, "y": 0.0, "z": 0.0, "sequence": "GGCCAATT", "type": "Reference", "frequency": 0.97},
+        {"id": 203, "x": -10.0, "y": 3.5, "z": -1.5, "sequence": "AAGGCCTTAAGGCCTTAAGG", "type": "Microduplication (SV >= 200bp)", "frequency": 0.18},
+        {"id": 204, "x": -10.0, "y": -3.5, "z": 1.5, "sequence": "ACT", "type": "Deletion (SV >= 1kb)", "frequency": 0.22},
+        {"id": 205, "x": -10.0, "y": 0.0, "z": 0.0, "sequence": "GGCCAA", "type": "Reference", "frequency": 0.60},
+        {"id": 206, "x": 0.0, "y": 0.0, "z": 0.0, "sequence": "TTAACCGG", "type": "Reference", "frequency": 0.99},
+        {"id": 207, "x": 10.0, "y": 2.5, "z": 2.0, "sequence": "TATATATATATATATA", "type": "Highly Polymorphic Repeating Microsatellite", "frequency": 0.40},
+        {"id": 208, "x": 10.0, "y": 0.0, "z": 0.0, "sequence": "GCGCGCGC", "type": "Reference", "frequency": 0.60},
+        {"id": 209, "x": 20.0, "y": 0.0, "z": 0.0, "sequence": "TTGGAACC", "type": "Reference", "frequency": 1.0}
+      ],
+      "edges": [
+        {"source": 201, "target": 202, "frequency": 1.00, "attention": 0.08, "cohorts": ["European", "African", "East_Asian", "Ashkenazi"]},
+        {"source": 202, "target": 203, "frequency": 0.18, "attention": 0.91, "cohorts": ["African"]},
+        {"source": 202, "target": 204, "frequency": 0.22, "attention": 0.85, "cohorts": ["Ashkenazi"]},
+        {"source": 202, "target": 205, "frequency": 0.60, "attention": 0.15, "cohorts": ["European", "East_Asian"]},
+        {"source": 203, "target": 206, "frequency": 0.99, "attention": 0.88, "cohorts": ["African"]},
+        {"source": 204, "target": 206, "frequency": 0.98, "attention": 0.80, "cohorts": ["Ashkenazi"]},
+        {"source": 205, "target": 206, "frequency": 1.00, "attention": 0.14, "cohorts": ["European", "East_Asian"]},
+        {"source": 206, "target": 207, "frequency": 0.40, "attention": 0.72, "cohorts": ["European", "Ashkenazi"]},
+        {"source": 206, "target": 208, "frequency": 0.60, "attention": 0.20, "cohorts": ["African", "East_Asian"]},
+        {"source": 207, "target": 209, "frequency": 1.00, "attention": 0.65, "cohorts": ["European", "Ashkenazi"]},
+        {"source": 208, "target": 209, "frequency": 1.00, "attention": 0.12, "cohorts": ["African", "East_Asian"]}
+      ],
+      "clinical_annotations": {
+        "node_203": {
+          "rsid": "rs558483",
+          "gene": "TBX1 (DiGeorge region)",
+          "clinical_significance": "Pathogenic / Risk Factor",
+          "phenotype": "Associated with DiGeorge/Velo-cardio-facial Syndrome (duplication allele)",
+          "review_status": "criteria provided, multiple submitters, no conflicts",
+          "allele_frequency": "0.178 (HPRC-African)"
+        },
+        "node_204": {
+          "rsid": "rs9043241",
+          "gene": "TBX1 (DiGeorge region)",
+          "clinical_significance": "Pathogenic / Deletion Variant",
+          "phenotype": "Congenital heart defects, craniofacial dysmorphology, thymic hypoplasia",
+          "review_status": "reviewed by expert panel",
+          "allele_frequency": "0.220 (GIAB-HG002)"
+        },
+        "node_207": {
+          "rsid": "rs1104859",
+          "gene": "COMT (Catechol-O-methyltransferase)",
+          "clinical_significance": "Affects Drug Response",
+          "phenotype": "Altered enzymatic activity affecting dopamine metabolism, impacts response to neuroleptic therapy",
+          "review_status": "criteria provided, single submitter",
+          "allele_frequency": "0.402 (HPRC-European)"
+        }
+      }
+    }
+  }
+}
