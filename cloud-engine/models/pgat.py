@@ -43,6 +43,11 @@ class PGATConv(MessagePassing):
         # Step 2: Run message passing (explicitly pass size to avoid PyG shape inference mismatch)
         out = self.propagate(edge_index, x=x, h_nodes=h_nodes, edge_attr=edge_attr, size=(x.size(0), x.size(0)))
         
+        # Dynamically align output size to match target node count (handles isolated nodes and PyG shape quirks)
+        if out.size(0) < x.size(0):
+            padding = torch.zeros(x.size(0) - out.size(0), *out.shape[1:], dtype=out.dtype, device=out.device)
+            out = torch.cat([out, padding], dim=0)
+            
         # Step 3: Mean head aggregation (reshape and take mean over heads)
         out = out.view(-1, self.heads, self.out_channels).mean(dim=1)
         
