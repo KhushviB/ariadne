@@ -275,39 +275,39 @@ export default function Visualizer3D({
       if (!inCohort) return;
 
       let color = 0xcbd5e1; // Default soft slate
-      let thickness = 0.08;
-      let opacity = 0.55;
+      let thickness = 0.02; // Thin sleek fiber-optic baseline
+      let opacity = 0.45;
 
       if (showAttention) {
         if (edge.attention > 0.8) {
           color = 0xec4899; // Pathological path (Magenta glow)
-          thickness = 0.3;
+          thickness = 0.09;
           opacity = 0.95;
         } else if (edge.attention > 0.5) {
           color = 0x0ea5e9; // Imputed transition (Sky Blue)
-          thickness = 0.2;
+          thickness = 0.06;
           opacity = 0.8;
         } else {
           color = 0x6366f1; // Background connection
-          thickness = 0.1;
-          opacity = 0.5;
+          thickness = 0.03;
+          opacity = 0.4;
         }
       } else {
         if (edge.cohorts.includes('African') && selectedCohort === 'African') {
           color = 0x10b981; // Emerald
-          thickness = 0.16;
+          thickness = 0.05;
           opacity = 0.8;
         } else if (edge.cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
           color = 0xf59e0b; // Amber
-          thickness = 0.16;
+          thickness = 0.05;
           opacity = 0.8;
         } else if (edge.cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
           color = 0x8b5cf6; // Purple
-          thickness = 0.16;
+          thickness = 0.05;
           opacity = 0.8;
         } else if (edge.cohorts.includes('European') && selectedCohort === 'European') {
           color = 0x0ea5e9; // Sky blue
-          thickness = 0.16;
+          thickness = 0.05;
           opacity = 0.8;
         }
       }
@@ -329,8 +329,8 @@ export default function Visualizer3D({
       const tubeGeom = new THREE.TubeGeometry(curve, 20, thickness, 8, false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: color,
-        roughness: 0.1,
-        metalness: 0.5,
+        roughness: 0.05,
+        metalness: 0.8,
         transparent: true,
         opacity: opacity,
         blending: showAttention && edge.attention > 0.5 ? THREE.AdditiveBlending : THREE.NormalBlending
@@ -344,9 +344,17 @@ export default function Visualizer3D({
     nodes.forEach(node => {
       const isSelected = node.id === selectedNodeId;
       
-      // Node dimensions: thicker capsule if selected
-      let radius = isSelected ? 1.1 : 0.7;
-      let height = isSelected ? 2.5 : 1.8;
+      // Determine dynamic base sizing (thicker for structural variants)
+      let baseRadius = 0.22;
+      let baseHeight = 0.8;
+
+      if (node.type.includes('Variant') || node.type.includes('Slot')) {
+        baseRadius = 0.45;
+        baseHeight = 1.4;
+      }
+
+      let radius = isSelected ? baseRadius * 1.6 : baseRadius;
+      let height = isSelected ? baseHeight * 1.5 : baseHeight;
       
       let color = 0x64748b; // Slate reference base
       let emissive = 0x000000;
@@ -357,7 +365,7 @@ export default function Visualizer3D({
       } else if (node.type.includes('Deletion')) {
         color = 0xef4444; // Rose red block
         emissive = 0x7f1d1d;
-      } else if (node.type.includes('Polymorphic') || node.type.includes('Translocation')) {
+      } else if (node.type.includes('Polymorphic') || node.type.includes('Translocation') || node.type.includes('Pathogenic')) {
         color = 0x8b5cf6; // Purple hypervariable block
         emissive = 0x4c1d95;
       } else {
@@ -370,23 +378,23 @@ export default function Visualizer3D({
         emissive = 0xec4899; // Magenta glow border selection
       }
 
-      // Capsule geometry makes nodes look like segment sequence bars/nucleosomes
+      // Capsule geometry standing upright (polymath bio style)
       const geometry = new THREE.CapsuleGeometry(radius, height, 4, 16);
       const material = new THREE.MeshStandardMaterial({
         color: color,
         emissive: emissive,
-        emissiveIntensity: isSelected ? 2.5 : 0.35,
-        roughness: 0.15,
-        metalness: 0.8,
+        emissiveIntensity: isSelected ? 3.5 : 0.85,
+        roughness: 0.1,
+        metalness: 0.9,
         transparent: true,
-        opacity: 0.95
+        opacity: 0.9
       });
 
       const capsule = new THREE.Mesh(geometry, material);
       capsule.position.set(node.x, node.y, node.z);
       
-      // Rotate capsule slightly so they stand vertically
-      capsule.rotation.z = Math.PI / 2;
+      // Stand capsules vertically to create clear visual spacing gaps
+      capsule.rotation.z = 0;
       group.add(capsule);
 
       nodeMeshesRef.current.push({ mesh: capsule, id: node.id });

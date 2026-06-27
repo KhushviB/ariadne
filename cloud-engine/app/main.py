@@ -65,12 +65,12 @@ def load_real_gfa_graphs():
                     continue
                 parts = line.strip().split('\t')
                 
-                # Downsample to first 2000 nodes to fit WebGL graphics limits
+                # Downsample to first 80 nodes to ensure clean visual spacing
                 if parts[0] == 'S':
                     node_id = int(parts[1])
                     seq = parts[2]
                     
-                    if len(nodes) < 2000:
+                    if len(nodes) < 80:
                         nodes.append({
                             "id": node_id,
                             "sequence": seq[:20] + ("..." if len(seq) > 20 else ""),
@@ -84,7 +84,7 @@ def load_real_gfa_graphs():
                     target = int(parts[3])
                     
                     # Store link if under memory limits
-                    if len(edges) < 3000:
+                    if len(edges) < 120:
                         edges.append({
                             "source": source,
                             "target": target,
@@ -106,8 +106,8 @@ def load_real_gfa_graphs():
                 
                 # Alternating coordinates to show alternate structural paths
                 if n["type"] == "Structural Variant Slot":
-                    y_coord = 2.5 * math.sin(theta) + (1.2 if idx % 2 == 0 else -1.2)
-                    z_coord = 2.5 * math.cos(theta) + (1.2 if idx % 3 == 0 else -1.2)
+                    y_coord = 2.5 * math.sin(theta) + (3.0 if idx % 2 == 0 else -3.0)
+                    z_coord = 2.5 * math.cos(theta) + (3.0 if idx % 3 == 0 else -3.0)
                 else:
                     y_coord = 1.8 * math.sin(theta)
                     z_coord = 1.8 * math.cos(theta)
