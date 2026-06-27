@@ -99,10 +99,13 @@ class PanGNNModel(nn.Module):
 
     def forward(self, x_tokens, edge_index, edge_attr):
         """
-        x_tokens: Integer indices of nucleotide sequence tokens [num_nodes]
+        x_tokens: Integer indices of nucleotide sequence tokens [num_nodes, max_len]
         """
-        # Convert tokens to continuous embeddings
-        x = self.token_embed(x_tokens) # [num_nodes, embed_dim]
+        # Convert tokens to continuous embeddings [num_nodes, max_len, embed_dim]
+        x = self.token_embed(x_tokens)
+        
+        # Pool sequence token embeddings over the sequence length [num_nodes, embed_dim]
+        x = x.mean(dim=1)
         
         # Pass through custom P-GAT layers
         h = self.conv1(x, edge_index, edge_attr)

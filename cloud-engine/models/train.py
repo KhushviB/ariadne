@@ -87,29 +87,12 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=4, lr=0
         for batch in loader:
             optimizer.zero_grad()
             
-            # Since input tokens x is [batch_size, max_len], we take mean embedding in Conv
-            # Reshape x to [batch_size] by taking first token, or flatten. 
-            # In our dataset, nodes contain 10 token indices. We pass the token matrix to token embed.
-            # PyG's NeighborLoader gathers node features.
-            # batch.x shape is [batch_size, 10]
-            # Since Embedding takes 1D tensor, we flatten tokens, run embedding, then pool back,
-            # or modify pgat.py to pool embeddings.
-            # Let's pool the embeddings across the token sequence dim:
-            # We map token embed on flat [batch_size * 10], then mean pool to [batch_size, embed_dim]
-            x_flat = batch.x.view(-1)
-            
-            # Call forward passing flat x_flat
-            h, impute_prob, pheno_risk = model(x_flat, batch.edge_index, batch.edge_attr)
-            
-            # Since forward outputs for [batch_size * 10] nodes, we pool node embeddings by taking mean
-            # over the sequence length 10.
-            h_pooled = h.view(-1, 10, h.size(-1)).mean(dim=1)
-            impute_prob_pooled = impute_prob.view(-1, 10, 1).mean(dim=1)
-            pheno_risk_pooled = pheno_risk.view(-1, 10, 1).mean(dim=1)
+            # Pass node token matrix directly. Pooling is done inside the model.
+            h, impute_prob, pheno_risk = model(batch.x, batch.edge_index, batch.edge_attr)
             
             # Match sizes with targets
-            loss_impute = criterion_impute(impute_prob_pooled, batch.y_impute)
-            loss_pheno = criterion_pheno(pheno_risk_pooled, batch.y_pheno)
+            loss_impute = criterion_impute(impute_prob, batch.y_impute)
+            loss_pheno = criterion_pheno(pheno_risk, batch.y_pheno)
             
             loss = loss_impute + 0.4 * loss_pheno
             loss.backward()
