@@ -32,17 +32,35 @@ def load_checkpoint(checkpoint_path, model, optimizer):
 def train_model(mock_data_path, checkpoint_dir, epochs=10, batch_size=4, lr=0.01):
     """Executescheckpoint-driven training loop for PanGNN."""
     # 1. Load data
-    with open(mock_data_path, 'r') as f:
-        raw_data = json.load(f)
-    
-    # Consolidate nodes and edges across Chr21 & Chr22
+    data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+    gfa_21 = os.path.join(data_dir, "chr21.gfa")
+    gfa_22 = os.path.join(data_dir, "chr22.gfa")
+
     all_nodes = []
     all_edges = []
-    
-    for chr_key in ['21', '22']:
-        chr_data = raw_data['chromosomes'][chr_key]
-        all_nodes.extend(chr_data['nodes'])
-        all_edges.extend(chr_data['edges'])
+
+    if os.path.exists(gfa_21) and os.path.exists(gfa_22):
+        print("Real-world GFA files detected. Parsing biological graphs for GNN training...")
+        import sys
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data-pipeline")))
+        from parse_gfa import parse_gfa
+        
+        nodes_21, edges_21 = parse_gfa(gfa_21)
+        nodes_22, edges_22 = parse_gfa(gfa_22)
+        
+        all_nodes.extend(nodes_21)
+        all_nodes.extend(nodes_22)
+        all_edges.extend(edges_21)
+        all_edges.extend(edges_22)
+    else:
+        print("Real GFA files not found. Using local simulated dataset...")
+        with open(mock_data_path, 'r') as f:
+            raw_data = json.load(f)
+        
+        for chr_key in ['21', '22']:
+            chr_data = raw_data['chromosomes'][chr_key]
+            all_nodes.extend(chr_data['nodes'])
+            all_edges.extend(chr_data['edges'])
 
     # 2. Build dataset and loader
     ds = PangenomeDataset()
