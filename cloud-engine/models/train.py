@@ -2,8 +2,8 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from .pgat import PanGNNModel
-from .dataset import PangenomeDataset
+from pgat import PanGNNModel
+from dataset import PangenomeDataset
 import json
 
 def save_checkpoint(state, checkpoint_dir, filename="checkpoint.pt"):
@@ -29,10 +29,13 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     print(f"Resuming from epoch {epoch} (loss: {loss:.4f})")
     return epoch, loss
 
-def train_model(mock_data_path, checkpoint_dir, epochs=10, batch_size=4, lr=0.01):
-    """Executescheckpoint-driven training loop for PanGNN."""
-    # 1. Load data
-    data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=4, lr=0.01):
+    """Executes checkpoint-driven training loop for PanGNN."""
+    if data_dir is None:
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+    if checkpoint_dir is None:
+        checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+
     gfa_21 = os.path.join(data_dir, "chr21.gfa")
     gfa_22 = os.path.join(data_dir, "chr22.gfa")
 
@@ -40,7 +43,7 @@ def train_model(mock_data_path, checkpoint_dir, epochs=10, batch_size=4, lr=0.01
     all_edges = []
 
     if os.path.exists(gfa_21) and os.path.exists(gfa_22):
-        print("Real-world GFA files detected. Parsing biological graphs for GNN training...")
+        print(f"Parsing biological graphs in {data_dir} for GNN training...")
         import sys
         sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data-pipeline")))
         from parse_gfa import parse_gfa
@@ -53,14 +56,7 @@ def train_model(mock_data_path, checkpoint_dir, epochs=10, batch_size=4, lr=0.01
         all_edges.extend(edges_21)
         all_edges.extend(edges_22)
     else:
-        print("Real GFA files not found. Using local simulated dataset...")
-        with open(mock_data_path, 'r') as f:
-            raw_data = json.load(f)
-        
-        for chr_key in ['21', '22']:
-            chr_data = raw_data['chromosomes'][chr_key]
-            all_nodes.extend(chr_data['nodes'])
-            all_edges.extend(chr_data['edges'])
+        raise FileNotFoundError(f"GFA graph files not found in {data_dir}. Please run data-pipeline/ingest.py first.")
 
     # 2. Build dataset and loader
     ds = PangenomeDataset()
@@ -140,9 +136,5 @@ def train_model(mock_data_path, checkpoint_dir, epochs=10, batch_size=4, lr=0.01
     torch.save(model.state_dict(), os.path.join(checkpoint_dir, "pangnn_final.pth"))
 
 if __name__ == '__main__':
-    # Local simulation test parameters
-    train_model(
-        mock_data_path=r"d:\BI\Ariadne\frontend\public\mock-data\mockGraph.json",
-        checkpoint_dir=r"d:\BI\Ariadne\results",
-        epochs=3
-    )
+    # Execute GNN training using the compiled data directory
+    train_model(epochs=1)
