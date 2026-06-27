@@ -40,8 +40,8 @@ class PGATConv(MessagePassing):
         # Step 1: Project node features (keep 2D for PyG propagate compatibility)
         h_nodes = self.W(x) # [num_nodes, heads * out_channels]
         
-        # Step 2: Run message passing
-        out = self.propagate(edge_index, x=x, h_nodes=h_nodes, edge_attr=edge_attr)
+        # Step 2: Run message passing (explicitly pass size to avoid PyG shape inference mismatch)
+        out = self.propagate(edge_index, x=x, h_nodes=h_nodes, edge_attr=edge_attr, size=(x.size(0), x.size(0)))
         
         # Step 3: Mean head aggregation (reshape and take mean over heads)
         out = out.view(-1, self.heads, self.out_channels).mean(dim=1)
