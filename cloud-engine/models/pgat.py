@@ -11,7 +11,7 @@ class PGATConv(MessagePassing):
     h_v^{(l+1)} = \sigma( W^{(l)} h_v^{(l)} + \sum_{u \in \mathcal{N}(v)} \alpha_{uv}^{(l)} M^{(l)}(h_u^{(l)}, \mathbf{e}_{uv}) )
     """
     def __init__(self, in_channels: int, out_channels: int, edge_dim: int, heads: int = 1):
-        super(PGATConv, self).__init__(aggr='add', flow='source_to_target')
+        super(PGATConv, self).__init__(aggr='add', flow='source_to_target', node_dim=0)
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.edge_dim = edge_dim
