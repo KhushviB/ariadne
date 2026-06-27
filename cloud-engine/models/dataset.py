@@ -68,18 +68,27 @@ class PangenomeDataset:
 
     def get_loader(self, data: Data, batch_size: int = 2000) -> list:
         """
-        Splits the single large graph into multiple subgraphs.
-        Uses pure PyTorch index filtering, avoiding binary 'pyg-lib' dependencies.
-        Trains on 5 subgraphs per epoch to optimize execution speed and conserve credits.
+        Splits the single large graph into multiple connected subgraphs.
+        Partitions nodes consecutively (representing chromosomal corridors)
+        and filters out any subgraphs that contain 0 edges to avoid GNN crash.
         """
         num_nodes = data.num_nodes
-        indices = torch.randperm(num_nodes)
-        
         subgraphs = []
-        # Construct up to 5 subgraphs to run model training verification
-        for i in range(0, min(num_nodes, batch_size * 5), batch_size):
-            batch_nodes = indices[i:i+batch_size]
+        
+        # Sequentially scan blocks of nodes
+        i = 0
+        while i < num_nodes and len(subgraphs) < 5:
+            batch_nodes = torch.arange(i, min(i + batch_size, num_nodes))
             sub_data = data.subgraph(batch_nodes)
-            subgraphs.append(sub_data)
+            
+            # Only keep subgraphs that have actual structural variant links/edges
+            if sub_data.edge_index.numel() > 0:
+                subgraphs.append(sub_data)
+                
+            i += batch_size
+            
+        # Fallback: if no subgraphs with edges are found, return the first slice
+        if not subgraphs:
+            subgraphs.append(data.subgraph(torch.arange(0, min(batch_size, num_nodes))))
             
         return subgraphs
