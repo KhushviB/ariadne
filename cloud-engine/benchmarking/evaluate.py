@@ -6,11 +6,12 @@ import torch.nn as nn
 import numpy as np
 import sys
 
-# Add root folder to python path for model imports
+# Add model and data-pipeline folders to python path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data-pipeline")))
 from models.pgat import PanGNNModel
 from models.dataset import PangenomeDataset
-from data_pipeline.parse_gfa import parse_gfa
+from parse_gfa import parse_gfa
 
 def calculate_metrics(tp, fp, fn):
     """Computes Precision, Recall, and F1-Score based on TP/FP/FN."""
