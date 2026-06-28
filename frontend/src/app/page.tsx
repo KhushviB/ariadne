@@ -97,7 +97,7 @@ export default function Dashboard() {
           target: e.target,
           frequency: e.frequency || 0.5,
           attention: data.attention_weights[idx] !== undefined ? data.attention_weights[idx] : 0.1,
-          cohorts: [selectedCohort]
+          cohorts: e.cohorts || ['Global']
         }));
 
         setNodes(mappedNodes);

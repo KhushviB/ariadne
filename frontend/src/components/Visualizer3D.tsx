@@ -271,71 +271,76 @@ export default function Visualizer3D({
 
       if (!sourceNode || !targetNode) return;
 
-      let color = 0x94a3b8; // Default soft slate
-      let thickness = 0.02; // Thin sleek fiber-optic baseline
-      let opacity = 0.45;
+      const cohorts = edge.cohorts || ['Global'];
+      let color = 0x475569; // Rich slate fallback (highly visible)
+      let thickness = 0.05; // Visible fiber-optic baseline
+      let opacity = 0.55;
 
       if (showAttention) {
         if (edge.attention > 0.8) {
-          color = 0xec4899; // Pathological path (Magenta glow)
-          thickness = 0.09;
+          color = 0xdb2777; // Pathological path (Vibrant Magenta glow)
+          thickness = 0.22;
           opacity = 0.95;
         } else if (edge.attention > 0.5) {
-          color = 0x0ea5e9; // Imputed transition (Sky Blue)
-          thickness = 0.06;
-          opacity = 0.8;
+          color = 0x0284c7; // Imputed transition (Vibrant Sky Blue)
+          thickness = 0.15;
+          opacity = 0.85;
         } else {
-          color = 0x6366f1; // Background connection
-          thickness = 0.03;
-          opacity = 0.4;
+          color = 0x4f46e5; // Background connection (Vibrant Indigo)
+          thickness = 0.07;
+          opacity = 0.5;
         }
       } else {
         // Multi-colored cohort ribbons in global view
         if (selectedCohort === 'all') {
-          if (edge.cohorts.includes('African')) {
-            color = 0x10b981; // Green
-            thickness = 0.035;
-            opacity = 0.7;
-          } else if (edge.cohorts.includes('Ashkenazi')) {
-            color = 0xf59e0b; // Amber
-            thickness = 0.035;
-            opacity = 0.7;
-          } else if (edge.cohorts.includes('East_Asian')) {
-            color = 0x8b5cf6; // Purple
-            thickness = 0.035;
-            opacity = 0.7;
-          } else if (edge.cohorts.includes('European')) {
-            color = 0x0ea5e9; // Sky Blue
-            thickness = 0.035;
-            opacity = 0.7;
+          if (cohorts.includes('African')) {
+            color = 0x059669; // Saturated Green
+            thickness = 0.08;
+            opacity = 0.8;
+          } else if (cohorts.includes('Ashkenazi')) {
+            color = 0xd97706; // Saturated Amber
+            thickness = 0.08;
+            opacity = 0.8;
+          } else if (cohorts.includes('East_Asian')) {
+            color = 0x7c3aed; // Saturated Purple
+            thickness = 0.08;
+            opacity = 0.8;
+          } else if (cohorts.includes('European')) {
+            color = 0x0284c7; // Saturated Sky Blue
+            thickness = 0.08;
+            opacity = 0.8;
           } else {
-            color = 0x94a3b8; // Global Slate
-            thickness = 0.02;
-            opacity = 0.45;
+            color = 0x475569; // Dark Slate
+            thickness = 0.06;
+            opacity = 0.6;
           }
         } else {
-          // Highlight selected cohort paths, fade others out to thin background threads
-          if (edge.cohorts.includes('African') && selectedCohort === 'African') {
-            color = 0x10b981; // Emerald
-            thickness = 0.06;
-            opacity = 0.85;
-          } else if (edge.cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
-            color = 0xf59e0b; // Amber
-            thickness = 0.06;
-            opacity = 0.85;
-          } else if (edge.cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
-            color = 0x8b5cf6; // Purple
-            thickness = 0.06;
-            opacity = 0.85;
-          } else if (edge.cohorts.includes('European') && selectedCohort === 'European') {
-            color = 0x0ea5e9; // Sky blue
-            thickness = 0.06;
-            opacity = 0.85;
+          // Highlight selected cohort paths, fade others out but keep them visible as thin colored threads
+          if (cohorts.includes('African') && selectedCohort === 'African') {
+            color = 0x059669; // Saturated Green
+            thickness = 0.18;
+            opacity = 0.95;
+          } else if (cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
+            color = 0xd97706; // Saturated Amber
+            thickness = 0.18;
+            opacity = 0.95;
+          } else if (cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
+            color = 0x7c3aed; // Saturated Purple
+            thickness = 0.18;
+            opacity = 0.95;
+          } else if (cohorts.includes('European') && selectedCohort === 'European') {
+            color = 0x0284c7; // Saturated Sky blue
+            thickness = 0.18;
+            opacity = 0.95;
           } else {
-            // Keep background edges extremely thin and translucent (helps visual depth)
-            color = 0xcbd5e1;
-            thickness = 0.01;
-            opacity = 0.15;
+            // Keep background edges thin but colored and visible (instead of blending in)
+            if (cohorts.includes('African')) color = 0x059669;
+            else if (cohorts.includes('Ashkenazi')) color = 0xd97706;
+            else if (cohorts.includes('East_Asian')) color = 0x7c3aed;
+            else if (cohorts.includes('European')) color = 0x0284c7;
+            
+            thickness = 0.03;
+            opacity = 0.25;
           }
         }
       }

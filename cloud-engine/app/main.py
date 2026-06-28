@@ -6,7 +6,7 @@ import glob
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 # Instantiate FastAPI
 app = FastAPI(
@@ -27,7 +27,7 @@ app.add_middleware(
 # 1. API Payload Contracts
 class GraphCoordinatePayload(BaseModel):
     nodes: List[Dict[str, float]]        # Contains [{"id": float, "x": float, "y": float, "z": float}, ...]
-    edges: List[Dict[str, int]]          # Contains [{"source": int, "target": int}, ...]
+    edges: List[Dict[str, Any]]          # Contains [{"source": int, "target": int, "cohorts": [...]}, ...]
     attention_weights: List[float]       # Quantized normalized scalars for glowing effects
     clinical_annotations: Dict[str, str] # ClinVar variant mappings for the sidebar (rsID -> description)
 
@@ -246,7 +246,8 @@ def get_subgraph(
             if cohort == "all" or cohort in e['cohorts']:
                 edges_payload.append({
                     "source": int(e['source']),
-                    "target": int(e['target'])
+                    "target": int(e['target']),
+                    "cohorts": e['cohorts']
                 })
                 # Generate attention weights (simulated model outputs mapped to edges)
                 attention_weights.append(round(random.uniform(0.15, 0.95), 3))
