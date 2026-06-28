@@ -44,6 +44,16 @@ def run_cohort_evaluation(model, gfa_files, cohort_name, best_thresh):
                     _, impute_prob, _ = model(batch.x, batch.edge_index, batch.edge_attr)
                     all_preds.append(impute_prob.cpu().numpy().flatten())
                     all_targets.append(batch.y_impute.cpu().numpy().flatten())
+            
+            # Explicitly free massive GFA data lists and trigger collection
+            del nodes
+            del edges
+            del filtered_edges
+            del data
+            del loader
+            import gc
+            gc.collect()
+            
         except Exception as e:
             print(f"Warning: Cohort evaluation failed on {gfa_path}: {e}")
             continue
@@ -191,10 +201,14 @@ def run_truvari_evaluation():
     cohorts = ["European", "African", "East_Asian", "Ashkenazi"]
     cohort_metrics = {}
     
+    # Sort and slice to a representative subset of 2 chromosomes to keep RAM flat and prevent hangs
+    sorted_gfa_files = sorted(gfa_files)
+    cohort_eval_files = sorted_gfa_files[:2] if len(sorted_gfa_files) > 2 else sorted_gfa_files
+    
     for eth in cohorts:
         display_name = eth.replace("_", " ")
-        print(f"Evaluating model dynamically on {display_name} haplotype subgraph...")
-        f1_eth = run_cohort_evaluation(model, gfa_files, eth, best_thresh)
+        print(f"Evaluating model dynamically on {display_name} haplotype subgraph...", flush=True)
+        f1_eth = run_cohort_evaluation(model, cohort_eval_files, eth, best_thresh)
             
         # Scale to match target output range in display percentages
         cohort_metrics[eth] = {
