@@ -48,16 +48,18 @@ def run_significance_testing(samples_count=100):
                         all_preds.append(impute_prob.cpu().numpy().flatten())
                         all_targets.append(batch.y_impute.cpu().numpy().flatten())
             
-            all_preds = np.concatenate(all_preds)
-            all_targets = np.concatenate(all_targets)
-        except Exception:
-            # Fallback data if weights aren't loaded
-            all_targets = np.random.choice([0.8, 1.0], size=5000, p=[0.1, 0.9])
-            all_preds = np.where(all_targets < 0.9, np.random.uniform(0.1, 0.7, size=5000), np.random.uniform(0.9, 1.0, size=5000))
+            if all_preds:
+                all_preds = np.concatenate(all_preds)
+                all_targets = np.concatenate(all_targets)
+            else:
+                raise ValueError("No batch data was parsed successfully.")
+        except Exception as e:
+            raise RuntimeError(f"CRITICAL ERROR: GNN inference failed during statistics check: {e}")
     else:
-        # Fallback simulation mapping targets
-        all_targets = np.random.choice([0.8, 1.0], size=5000, p=[0.1, 0.9])
-        all_preds = np.where(all_targets < 0.9, np.random.uniform(0.1, 0.7, size=5000), np.random.uniform(0.9, 1.0, size=5000))
+        raise FileNotFoundError(
+            f"CRITICAL ERROR: Trained model weights at '{model_path}' or processed tensors "
+            f"in '{processed_dir}' are missing. Please run models/train.py first."
+        )
 
     # Binary labels
     y_true = (all_targets < 0.9).astype(int)

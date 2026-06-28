@@ -41,25 +41,18 @@ def run_live_grid_search(pt_path):
     f1_grid = np.zeros((len(depths), len(widths)))
     
     if not pt_path or not os.path.exists(pt_path):
-        print("Warning: Processed graph tensor not found. Using relative simulated matrix.")
-        # Baseline trend matrix
-        return np.array([
-            [89.2, 91.5, 90.8],
-            [92.4, 95.6, 94.8],
-            [91.1, 94.2, 93.5],
-            [88.6, 92.1, 91.3]
-        ])
+        raise FileNotFoundError(
+            f"CRITICAL ERROR: Processed graph tensor at '{pt_path}' is missing. "
+            f"Dynamic hyperparameter grids require parsed data segments."
+        )
         
     chr_data = torch.load(pt_path, map_location=torch.device('cpu'))
     ds = PangenomeDataset()
     loader = ds.get_loader(chr_data, batch_size=2000)
     if not loader:
-        return np.array([
-            [89.2, 91.5, 90.8],
-            [92.4, 95.6, 94.8],
-            [91.1, 94.2, 93.5],
-            [88.6, 92.1, 91.3]
-        ])
+        raise ValueError(
+            f"CRITICAL ERROR: No batches were generated from graph tensor '{pt_path}'."
+        )
     batch = loader[0]
     
     # Target targets
