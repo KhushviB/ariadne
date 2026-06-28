@@ -225,19 +225,43 @@ def parse_gfa(gfa_path):
     
     real_variants = load_giab_variants(vcf_path, chr_id, min_pos, max_pos)
     
-    # 4. Intersect GFA nodes with VCF variants to assign ground-truth labels
+    # 4. Intersect GFA nodes with VCF variants using binary search in O(N log V)
+    print("[GFA PARSER] Intersecting nodes with VCF variants using binary search...", flush=True)
+    import bisect
+    
+    # Pre-extract variant start coordinates for binary search
+    v_starts = [v[0] for v in real_variants]
+    
     nodes = []
     variants_overlapped_count = 0
+    
+    # Safe maximum length boundary for structural variants to prevent unbounded backward scanning
+    MAX_VAR_LEN = 1000000
+    
     for nid, seq in raw_nodes:
         node_start, node_end = node_coords.get(nid, (0, 0))
-        
-        # Check overlaps
         overlap_variant = None
-        for v_start, v_end, af in real_variants:
-            if max(node_start, v_start) < min(node_end, v_end):
+        
+        # Binary search for the first variant starting at or after node_start
+        idx = bisect.bisect_left(v_starts, node_start)
+        
+        # 1. Check the candidate starting at or after node_start
+        if idx < len(real_variants):
+            v_start, v_end, af = real_variants[idx]
+            if v_start < node_end:
                 overlap_variant = af
-                break
                 
+        # 2. Scan backwards for any overlapping variants starting before node_start
+        if overlap_variant is None:
+            for i in range(idx - 1, -1, -1):
+                v_start, v_end, af = real_variants[i]
+                # Break immediately if the variant starts too far back to reach the node
+                if node_start - v_start > MAX_VAR_LEN:
+                    break
+                if v_end > node_start:
+                    overlap_variant = af
+                    break
+                    
         node_type = "Reference"
         frequency = 1.0
         
