@@ -58,6 +58,7 @@ export default function Dashboard() {
 
   // Fetch coordinates dynamically from remote API when available
   const [imputationResult, setImputationResult] = useState<any>(null);
+  const [activePatientFile, setActivePatientFile] = useState<string | null>(null);
 
   useEffect(() => {
     const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -244,6 +245,8 @@ export default function Dashboard() {
           onImputeNode={handleImputeNode}
           imputationResult={imputationResult}
           onLogMessage={logMessage}
+          activePatientFile={activePatientFile}
+          onUploadPatientFile={setActivePatientFile}
         />
       </main>
     </div>

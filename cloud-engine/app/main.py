@@ -83,21 +83,20 @@ def load_real_gfa_graphs():
                     source = int(parts[1])
                     target = int(parts[3])
                     
-                    # Distribute edges to simulate real HPRC cohort haplotype walks
-                    edge_cohorts = ["Global"]
-                    # Use seed to ensure consistent structural layouts
-                    random.seed(source + target)
-                    if random.random() < 0.4:
-                        edge_cohorts.append("European")
-                    if random.random() < 0.35:
-                        edge_cohorts.append("African")
-                    if random.random() < 0.3:
-                        edge_cohorts.append("East_Asian")
-                    if random.random() < 0.25:
-                        edge_cohorts.append("Ashkenazi")
+                    if source in node_ids and target in node_ids:
+                        # Distribute edges to simulate real HPRC cohort haplotype walks
+                        edge_cohorts = ["Global"]
+                        # Use seed to ensure consistent structural layouts
+                        random.seed(source + target)
+                        if random.random() < 0.4:
+                            edge_cohorts.append("European")
+                        if random.random() < 0.35:
+                            edge_cohorts.append("African")
+                        if random.random() < 0.3:
+                            edge_cohorts.append("East_Asian")
+                        if random.random() < 0.25:
+                            edge_cohorts.append("Ashkenazi")
 
-                    # Store link if under memory limits
-                    if len(edges) < 120:
                         edges.append({
                             "source": source,
                             "target": target,
@@ -105,11 +104,9 @@ def load_real_gfa_graphs():
                             "attention": 0.0,
                             "cohorts": edge_cohorts
                         })
-                    else:
-                        break
 
-        # Keep edges connecting only active loaded nodes
-        edges = [e for e in edges if e['source'] in node_ids and e['target'] in node_ids]
+                        if len(edges) >= 120:
+                            break
         
         # Calculate beautiful 3D coordinates along a helical pangenome corridor
         total_nodes = len(nodes)

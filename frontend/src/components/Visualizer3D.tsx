@@ -58,8 +58,8 @@ export default function Visualizer3D({
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8fafc); // Light slate biological background
-    scene.fog = new THREE.FogExp2(0xf8fafc, 0.012);
+    scene.background = new THREE.Color(0x090d16); // Deep midnight biological dark background
+    scene.fog = new THREE.FogExp2(0x090d16, 0.012);
     sceneRef.current = scene;
 
     // 2. Camera Setup
@@ -362,8 +362,10 @@ export default function Visualizer3D({
       const tubeGeom = new THREE.TubeGeometry(curve, 20, thickness, 8, false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: color,
-        roughness: 0.05,
-        metalness: 0.8,
+        emissive: color,
+        emissiveIntensity: showAttention && edge.attention > 0.5 ? 2.5 : 0.65,
+        roughness: 0.1,
+        metalness: 0.9,
         transparent: true,
         opacity: opacity,
         blending: showAttention && edge.attention > 0.5 ? THREE.AdditiveBlending : THREE.NormalBlending
@@ -378,37 +380,37 @@ export default function Visualizer3D({
       const isSelected = node.id === selectedNodeId;
       
       // Determine dynamic base sizing (thicker for structural variants)
-      let baseRadius = 0.22;
-      let baseHeight = 0.8;
+      let baseRadius = 0.12;
+      let baseHeight = 0.35;
 
       if (node.type.includes('Variant') || node.type.includes('Slot')) {
-        baseRadius = 0.45;
-        baseHeight = 1.4;
+        baseRadius = 0.20;
+        baseHeight = 0.65;
       }
 
-      let radius = isSelected ? baseRadius * 1.6 : baseRadius;
-      let height = isSelected ? baseHeight * 1.5 : baseHeight;
+      let radius = isSelected ? baseRadius * 1.5 : baseRadius;
+      let height = isSelected ? baseHeight * 1.4 : baseHeight;
       
       let color = 0x64748b; // Slate reference base
       let emissive = 0x000000;
 
       if (node.type.includes('Insertion')) {
-        color = 0x10b981; // Emerald block
-        emissive = 0x064e3b;
+        color = 0x059669; // Emerald block
+        emissive = 0x047857;
       } else if (node.type.includes('Deletion')) {
-        color = 0xef4444; // Rose red block
-        emissive = 0x7f1d1d;
+        color = 0xdb2777; // Rose/Magenta block
+        emissive = 0x9d174d;
       } else if (node.type.includes('Polymorphic') || node.type.includes('Translocation') || node.type.includes('Pathogenic')) {
-        color = 0x8b5cf6; // Purple hypervariable block
-        emissive = 0x4c1d95;
+        color = 0x7c3aed; // Purple hypervariable block
+        emissive = 0x5b21b6;
       } else {
-        color = 0x0ea5e9; // Cyan reference block
+        color = 0x0284c7; // Sky blue reference block
         emissive = 0x0369a1;
       }
 
       if (isSelected) {
         color = 0xffffff;
-        emissive = 0xec4899; // Magenta glow border selection
+        emissive = 0xdb2777; // Magenta glow border selection
       }
 
       // Capsule geometry standing upright (polymath bio style)
@@ -416,11 +418,11 @@ export default function Visualizer3D({
       const material = new THREE.MeshStandardMaterial({
         color: color,
         emissive: emissive,
-        emissiveIntensity: isSelected ? 3.5 : 0.85,
-        roughness: 0.1,
-        metalness: 0.9,
+        emissiveIntensity: isSelected ? 3.5 : 1.2,
+        roughness: 0.15,
+        metalness: 0.8,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.85
       });
 
       const capsule = new THREE.Mesh(geometry, material);
@@ -442,43 +444,46 @@ export default function Visualizer3D({
       {/* Floating Biological Legend Overlay */}
       <div className="glass-panel" style={{
         position: 'absolute',
-        bottom: '20px',
-        left: '20px',
-        maxWidth: '320px',
-        padding: '12px',
-        fontSize: '12px',
+        bottom: '24px',
+        left: '24px',
+        maxWidth: '340px',
+        padding: '16px',
+        fontSize: '11px',
         pointerEvents: 'none',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
-        background: 'rgba(255, 255, 255, 0.85)',
-        border: '1px solid #cbd5e1'
+        gap: '10px',
+        background: 'hsla(var(--bg-card) / 0.85)',
+        border: '1px solid hsla(var(--border-glass) / 0.8)',
+        borderRadius: '12px',
+        boxShadow: '0 12px 32px 0 rgba(0, 0, 0, 0.4)',
+        color: 'hsl(var(--text-secondary))'
       }}>
-        <div style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '10.5px', color: 'hsl(var(--text-secondary))', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
+        <div style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '10px', color: 'hsl(var(--text-primary))', borderBottom: '1px solid hsla(var(--text-muted)/0.2)', paddingBottom: '6px', letterSpacing: '1px' }}>
           🧬 Pangenome Haplotype Legend
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '16px', height: '6px', borderRadius: '3px', background: '#94a3b8', opacity: 0.4 }} />
+          <div style={{ width: '16px', height: '6px', borderRadius: '3px', background: '#475569', opacity: 0.5 }} />
           <span><strong>Linear Reference (GRCh38):</strong> Canonical chromosome coordinate backbone</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#0ea5e9' }} />
+          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#0284c7' }} />
           <span><strong>Conserved Reference:</strong> Intact conserved sequence pathway</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#10b981' }} />
+          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#059669' }} />
           <span><strong>Alternate Insertion:</strong> Added sequence track (SV &ge; 50bp)</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#ef4444' }} />
+          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#db2777' }} />
           <span><strong>Alternate Deletion:</strong> Deleted sequence track (SV &ge; 50bp)</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#8b5cf6' }} />
+          <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#7c3aed' }} />
           <span><strong>Polymorphic Locus:</strong> Hypervariable genetic region</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #e2e8f0', paddingTop: '4px', marginTop: '2px' }}>
-          <div style={{ width: '16px', height: '4px', background: 'linear-gradient(90deg, #0ea5e9, #ec4899)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid hsla(var(--text-muted)/0.2)', paddingTop: '6px', marginTop: '2px' }}>
+          <div style={{ width: '16px', height: '4px', background: 'linear-gradient(90deg, #0284c7, #db2777)' }} />
           <span><strong>Diagnostic Weights:</strong> Line thickness reflects path significance</span>
         </div>
       </div>

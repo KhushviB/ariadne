@@ -1,22 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
 
 :root {
-  /* HSL Harmonious Biological Light Theme Colors */
-  --bg-deep: 150 16% 96%;        /* Soft sage mint cream background */
-  --bg-card: 0 0% 100%;          /* White cards */
-  --bg-glass: 0 0% 100% / 0.75;  /* Light glassmorphism */
-  --border-glass: 150 20% 82% / 0.5; /* Sage green borders */
+  /* HSL Harmonious Bioluminescent Clinical Dark Theme Colors */
+  --bg-deep: 222 47% 6%;          /* Rich deep midnight navy/black */
+  --bg-card: 222 47% 10%;         /* Deep navy cards */
+  --bg-glass: 222 47% 8% / 0.75;  /* Dark glassmorphism */
+  --border-glass: 222 30% 20% / 0.6; /* Slate borders */
   
-  --primary-glow: 150 85% 40%;   /* Glowing emerald */
-  --accent-cyan: 185 85% 40%;
-  --accent-emerald: 150 75% 35%;
-  --accent-purple: 270 65% 45%;
-  --accent-rose: 340 75% 45%;
-  --accent-amber: 35 85% 40%;
+  --primary-glow: 150 85% 55%;   /* Bioluminescent glowing emerald */
+  --accent-cyan: 185 85% 55%;    /* Glowing cyan */
+  --accent-emerald: 150 75% 50%;
+  --accent-purple: 270 75% 65%;  /* Glowing purple */
+  --accent-rose: 340 85% 60%;    /* Glowing rose */
+  --accent-amber: 35 90% 55%;    /* Glowing amber */
 
-  --text-primary: 220 30% 12%;   /* Dark slate */
-  --text-secondary: 220 20% 32%; /* Medium slate */
-  --text-muted: 220 12% 52%;      /* Soft grey */
+  --text-primary: 210 40% 98%;   /* Almost white text */
+  --text-secondary: 215 20% 80%; /* Light grey text */
+  --text-muted: 215 16% 58%;     /* Cool grey text */
 
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
@@ -122,7 +122,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  background: #f8fafc;
+  background: #090d16;
   overflow: hidden;
 }
 

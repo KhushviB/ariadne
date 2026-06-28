@@ -39,6 +39,8 @@ interface SidebarProps {
   onImputeNode?: (nodeId: number) => void;
   imputationResult?: any;
   onLogMessage?: (text: string, type: 'success' | 'info' | 'warning') => void;
+  activePatientFile: string | null;
+  onUploadPatientFile: (filename: string | null) => void;
 }
 
 export default function Sidebar({
@@ -55,7 +57,9 @@ export default function Sidebar({
   clearLogs,
   onImputeNode,
   imputationResult,
-  onLogMessage
+  onLogMessage,
+  activePatientFile,
+  onUploadPatientFile
 }: SidebarProps) {
   return (
     <aside className="sidebar">
@@ -70,11 +74,14 @@ export default function Sidebar({
               input.accept = '.fastq,.fq,.vcf,.bam,.cram';
               input.onchange = (e: any) => {
                 const file = e.target.files[0];
-                if (file && onLogMessage) {
-                  onLogMessage(`Patient sample ${file.name} uploaded successfully. Reading sequence reads...`, 'success');
-                  setTimeout(() => {
-                    onLogMessage(`Traversing pangenome graph... Haplotype pathways resolved.`, 'info');
-                  }, 500);
+                if (file) {
+                  onUploadPatientFile(file.name);
+                  if (onLogMessage) {
+                    onLogMessage(`Patient sample ${file.name} uploaded successfully. Reading sequence reads...`, 'success');
+                    setTimeout(() => {
+                      onLogMessage(`Traversing pangenome graph... Haplotype pathways resolved.`, 'info');
+                    }, 500);
+                  }
                 }
               };
               input.click();
@@ -103,12 +110,45 @@ export default function Sidebar({
           >
             <span style={{ fontSize: '28px' }}>📂</span>
             <span style={{ fontWeight: 'bold', fontSize: '12px', color: 'hsl(var(--text-secondary))' }}>
-              Load Patient Sequencing Reads
+              {activePatientFile ? `Sample: ${activePatientFile}` : 'Load Patient Sequencing Reads'}
             </span>
             <span style={{ fontSize: '10px', color: 'hsl(var(--text-muted))' }}>
-              Supports standard .fastq / .vcf files
+              {activePatientFile ? '✔ DNA sequence loaded and mapped' : 'Supports standard .fastq / .vcf files'}
             </span>
           </div>
+          {activePatientFile && (
+            <div style={{
+              background: 'hsla(var(--accent-emerald)/0.1)',
+              border: '1px solid hsla(var(--accent-emerald)/0.3)',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              fontSize: '11.5px',
+              color: 'hsl(var(--accent-emerald))',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '4px'
+            }}>
+              <span>🧬 Ready for pathology diagnostics</span>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUploadPatientFile(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'hsl(var(--accent-rose))',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase'
+                }}
+              >
+                [REMOVE]
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
