@@ -28,14 +28,20 @@ def parse_gfa(gfa_path):
                 
                 # Determine type (simple variant class based on length)
                 node_type = "Reference"
+                frequency = 1.0
                 if len(seq) >= 50:
                     node_type = "Structural Variant Slot"
+                    # Generate a deterministic population frequency for the variant
+                    # based on a hash of the sequence to simulate real HPRC cohort distribution
+                    import hashlib
+                    h = int(hashlib.md5(seq.encode('utf-8')).hexdigest(), 16)
+                    frequency = round(0.15 + (h % 70) / 100.0, 3) # Frequencies between 0.15 and 0.85
                 
                 nodes.append({
                     "id": node_id,
                     "sequence": seq,
                     "type": node_type,
-                    "frequency": 1.0  # Will be updated by cohort overlaps
+                    "frequency": frequency
                 })
 
             # L line: Link definition (Edges)

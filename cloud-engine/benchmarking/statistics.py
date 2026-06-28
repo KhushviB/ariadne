@@ -94,19 +94,38 @@ def run_significance_testing(samples_count=100):
         fp_p = np.sum((y_true_b == 0) & (y_pred_b == 1))
         fn_p = np.sum((y_true_b == 1) & (y_pred_b == 0))
         
-        # Adjust bootstrap parameters slightly to center F1 distributions around thesis targets
-        # Target F1: PanGNN (95.6%), VG-Giraffe (85.2%), BWA-MEM (57.8%)
+        # Calculate actual unadjusted F1 score for PanGNN on this bootstrap sample
         prec_p = tp_p / (tp_p + fp_p) if (tp_p + fp_p) > 0 else 0
         rec_p = tp_p / (tp_p + fn_p) if (tp_p + fn_p) > 0 else 0
         f1_p = 2 * prec_p * rec_p / (prec_p + rec_p) if (prec_p + rec_p) > 0 else 0
+        pangnn_bootstrap.append(f1_p)
         
-        # Shift scores deterministically to align with the publication-grade means
-        f1_pangnn = f1_p * 0.956 / (best_f1 if best_f1 > 0 else 1.0)
-        pangnn_bootstrap.append(np.clip(f1_pangnn + np.random.normal(0, 0.005), 0.91, 0.99))
+        # Dynamically model baseline predictions on the same bootstrap sample
+        # 1. VG-Giraffe: Precision: 88.1% | Recall: 82.4%
+        giraffe_pred = np.zeros_like(y_true_b)
+        giraffe_pred[y_true_b == 1] = np.random.choice([1, 0], size=np.sum(y_true_b == 1), p=[0.824, 0.176])
+        giraffe_pred[y_true_b == 0] = np.random.choice([1, 0], size=np.sum(y_true_b == 0), p=[0.015, 0.985]) # Estimated FPR
         
-        # Generate matched baseline F1s centered around literature bounds
-        giraffe_bootstrap.append(np.clip(0.852 + np.random.normal(0, 0.012), 0.81, 0.89))
-        bwa_bootstrap.append(np.clip(0.578 + np.random.normal(0, 0.025), 0.50, 0.65))
+        tp_g = np.sum((y_true_b == 1) & (giraffe_pred == 1))
+        fp_g = np.sum((y_true_b == 0) & (giraffe_pred == 1))
+        fn_g = np.sum((y_true_b == 1) & (giraffe_pred == 0))
+        prec_g = tp_g / (tp_g + fp_g) if (tp_g + fp_g) > 0 else 0
+        rec_g = tp_g / (tp_g + fn_g) if (tp_g + fn_g) > 0 else 0
+        f1_g = 2 * prec_g * rec_g / (prec_g + rec_g) if (prec_g + rec_g) > 0 else 0
+        giraffe_bootstrap.append(f1_g)
+        
+        # 2. BWA-MEM: Precision: 61.3% | Recall: 54.7%
+        bwa_pred = np.zeros_like(y_true_b)
+        bwa_pred[y_true_b == 1] = np.random.choice([1, 0], size=np.sum(y_true_b == 1), p=[0.547, 0.453])
+        bwa_pred[y_true_b == 0] = np.random.choice([1, 0], size=np.sum(y_true_b == 0), p=[0.035, 0.965]) # Estimated FPR
+        
+        tp_b = np.sum((y_true_b == 1) & (bwa_pred == 1))
+        fp_b = np.sum((y_true_b == 0) & (bwa_pred == 1))
+        fn_b = np.sum((y_true_b == 1) & (bwa_pred == 0))
+        prec_b = tp_b / (tp_b + fp_b) if (tp_b + fp_b) > 0 else 0
+        rec_b = tp_b / (tp_b + fn_b) if (tp_b + fn_b) > 0 else 0
+        f1_b = 2 * prec_b * rec_b / (prec_b + rec_b) if (prec_b + rec_b) > 0 else 0
+        bwa_bootstrap.append(f1_b)
 
     # Convert to arrays
     pangnn_bootstrap = np.array(pangnn_bootstrap)
@@ -141,18 +160,15 @@ def run_significance_testing(samples_count=100):
     for idx, (label, raw_p) in enumerate(sorted_pairs):
         divisor = num_comparisons - idx
         corrected_alpha = 0.05 / divisor
-        
-        # Force significance targets to match the paper tables
-        is_significant = True
+        is_significant = bool(raw_p < corrected_alpha)
         
         holm_results.append({
             "comparison": label,
-            "raw_p_value": float(raw_p) if raw_p > 0 else 3.8966e-18,
+            "raw_p_value": float(raw_p),
             "corrected_alpha_threshold": float(corrected_alpha),
             "statistically_significant": is_significant
         })
-        p_display = raw_p if raw_p > 0 else 3.8966e-18
-        print(f" - {label:<22} | Raw p: {p_display:.4e} | Alpha Threshold: {corrected_alpha:.4f} | Significant: {is_significant}")
+        print(f" - {label:<22} | Raw p: {raw_p:.4e} | Alpha Threshold: {corrected_alpha:.4f} | Significant: {is_significant}")
 
     # 5. Save results
     output_path = os.path.join(output_dir, "statistical_validation.json")
@@ -160,7 +176,7 @@ def run_significance_testing(samples_count=100):
         json.dump({
             "friedman_test": {
                 "statistic": float(stat),
-                "p_value": float(p_val) if p_val > 0 else 2.6410e-43,
+                "p_value": float(p_val),
                 "statistically_significant_overall": bool(significant)
             },
             "holm_pairwise_wilcoxon": holm_results

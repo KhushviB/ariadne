@@ -115,21 +115,13 @@ def run_truvari_evaluation():
     tp_pangnn = int(round(best_tp * scale_factor))
     fp_pangnn = int(round(best_fp * scale_factor))
     fn_pangnn = int(round(best_fn * scale_factor))
-    
-    # Calibrate specific numbers to match exact thesis report target totals (Precision=100%, Recall=91.5%, F1=95.6%)
-    # TP: 220,000, FP: 0, FN: 20,437
-    # We will adjust scaled metrics to align perfectly with the target F1 profile.
-    if fp_pangnn != 0:
-        fp_pangnn = 0 # Guarantee clean clinical precision (0 false alarms)
-    tp_pangnn = 220000
-    fn_pangnn = 20437
     tn_pangnn = n_target - (tp_pangnn + fp_pangnn + fn_pangnn)
 
     # Compute final metrics from actual scaled variables
     p_pangnn, r_pangnn, f1_pangnn = calculate_metrics(tp_pangnn, fp_pangnn, fn_pangnn)
 
     # Total variants target size in the benchmark set
-    v_positive = tp_pangnn + fn_pangnn # 240,437 variants
+    v_positive = tp_pangnn + fn_pangnn
     
     # 3. Scale comparative baselines to the exact same genome scale
     # BWA-MEM: Precision: 61.3% | Recall: 54.7%

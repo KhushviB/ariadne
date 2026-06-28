@@ -13,7 +13,11 @@ def generate_benchmark_plots():
     json_path = os.path.join(results_dir, "accuracy_comparison.json")
     
     # Default metric fallbacks
-    pan_p, pan_r, pan_f = 94.2, 91.5, 92.8
+    benchmarks_data = {
+        "BWA-MEM": {"precision": 61.3, "recall": 54.7, "f1": 57.8},
+        "VG-Giraffe": {"precision": 88.1, "recall": 82.4, "f1": 85.2},
+        "PanGNN": {"precision": 94.2, "recall": 91.5, "f1": 92.8}
+    }
     throughput = {"PanGNN": 450.0, "VG-Giraffe": 180.0, "BWA-MEM": 320.0}
     memory = {"PanGNN": 8.6, "VG-Giraffe": 32.4, "BWA-MEM": 5.2}
     cohorts_data = {
@@ -29,11 +33,12 @@ def generate_benchmark_plots():
             with open(json_path, 'r') as f:
                 data = json.load(f)
                 
-                # Load accuracy
-                pan_results = data["results"]["PanGNN"]
-                pan_p = pan_results["precision"] * 100
-                pan_r = pan_results["recall"] * 100
-                pan_f = pan_results["f1"] * 100
+                # Load accuracy dynamically for all models
+                for name in ["BWA-MEM", "VG-Giraffe", "PanGNN"]:
+                    if name in data["results"]:
+                        benchmarks_data[name]["precision"] = data["results"][name]["precision"] * 100
+                        benchmarks_data[name]["recall"] = data["results"][name]["recall"] * 100
+                        benchmarks_data[name]["f1"] = data["results"][name]["f1"] * 100
                 
                 # Load computational performance
                 if "computational_metrics" in data:
@@ -44,7 +49,7 @@ def generate_benchmark_plots():
                 if "cohort_metrics" in data:
                     cohorts_data = data["cohort_metrics"]
                     
-                print(f"Loaded dynamic metrics: Accuracy={pan_f:.1f}%, Speed={throughput['PanGNN']:.1f}kb/s")
+                print(f"Loaded dynamic metrics: Accuracy={benchmarks_data['PanGNN']['f1']:.1f}%, Speed={throughput['PanGNN']:.1f}kb/s")
         except Exception as e:
             print(f"Warning: Failed to load dynamic JSON ({e}). Using default parameters.")
 
@@ -52,9 +57,9 @@ def generate_benchmark_plots():
     # PLOT 1: ACCURACY COMPARISON (PRECISION, RECALL, F1)
     # =========================================================================
     methods = ['BWA-MEM (Linear Align)', 'VG-Giraffe (Graph Align)', 'PanGNN (Our Model)']
-    precision = [61.3, 88.1, pan_p]
-    recall = [54.7, 82.4, pan_r]
-    f1_score = [57.8, 85.2, pan_f]
+    precision = [benchmarks_data["BWA-MEM"]["precision"], benchmarks_data["VG-Giraffe"]["precision"], benchmarks_data["PanGNN"]["precision"]]
+    recall = [benchmarks_data["BWA-MEM"]["recall"], benchmarks_data["VG-Giraffe"]["recall"], benchmarks_data["PanGNN"]["recall"]]
+    f1_score = [benchmarks_data["BWA-MEM"]["f1"], benchmarks_data["VG-Giraffe"]["f1"], benchmarks_data["PanGNN"]["f1"]]
 
     x = np.arange(len(methods))
     width = 0.25

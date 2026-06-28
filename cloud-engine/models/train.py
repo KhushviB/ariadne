@@ -60,10 +60,8 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
         chr_id = filename.replace("chr", "").replace(".gfa", "")
         pt_path = os.path.join(processed_dir, f"chr_{chr_id}.pt")
         
-        if os.path.exists(pt_path):
-            print(f"[{idx+1}/{len(gfa_files)}] PyG dataset for Chromosome {chr_id} already parsed on disk. Skipping.")
-            pyg_paths.append(pt_path)
-            continue
+        # Re-parse GFA graphs to ensure fresh token and frequency alignments
+        pass
             
         print(f"[{idx+1}/{len(gfa_files)}] Parsing GFA graph: {filename}...")
         try:
