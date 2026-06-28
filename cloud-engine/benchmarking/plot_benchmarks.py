@@ -24,7 +24,7 @@ def generate_benchmark_plots():
     rects3 = ax.bar(x + width, f1_score, width, label='F1-Score (Harmonic Mean)', color='#7c3aed', edgecolor='black', linewidth=0.6)
 
     # Grid & Axis Customization
-    ax.grid(color='rgba(0,0,0,0.06)', linestyle='--', linewidth=0.8)
+    ax.grid(color='#cbd5e1', linestyle='--', linewidth=0.8)
     ax.set_ylabel('Accuracy Metric (%)', fontsize=11, fontweight='bold', labelpad=10)
     ax.set_title('Clinical Structural Variant (SV) Pathological Detection Accuracy\n(Validated against NIST GIAB HG002 Benchmarking Standards)', 
                  fontsize=12, fontweight='bold', pad=15)
