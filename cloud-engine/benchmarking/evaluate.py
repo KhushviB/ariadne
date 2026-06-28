@@ -114,6 +114,7 @@ def run_truvari_evaluation():
         "Ashkenazi": {"PanGNN": 95.9, "VG-Giraffe": 85.8, "BWA-MEM": 59.8}
     }
 
+    output_file = os.path.join(output_dir, "accuracy_comparison.json")
     with open(output_file, 'w') as f:
         json.dump({
             "evaluation_criteria": {
