@@ -3,10 +3,11 @@ import json
 import gzip
 import random
 
-def load_giab_variants(vcf_path, chr_id):
+def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     """
     Parses variant coordinates and allele frequencies from the GIAB VCF file.
-    If the VCF file is missing, raises FileNotFoundError to prevent silent simulated falls.
+    If the VCF file is missing, raises FileNotFoundError.
+    Optimized for fast chromosome scanning and coordinate range breaks.
     """
     if not os.path.exists(vcf_path):
         raise FileNotFoundError(
@@ -17,30 +18,43 @@ def load_giab_variants(vcf_path, chr_id):
     variants = []
     print(f"Parsing GIAB HG002 benchmark variants from VCF: {vcf_path}...")
     
-    # Open gzip or plain VCF file
     open_func = gzip.open if vcf_path.endswith('.gz') else open
     mode = 'rt' if vcf_path.endswith('.gz') else 'r'
     
+    prefix1 = f"chr{chr_id}\t"
+    prefix2 = f"{chr_id}\t"
+    
     with open_func(vcf_path, mode) as f:
+        entered_chrom = False
         for line in f:
-            if line.startswith('#'):
-                continue
-            parts = line.strip().split('\t')
-            chrom = parts[0].replace("chr", "")
-            
-            # Filter for target chromosome
-            if chrom != str(chr_id):
+            if line[0] == '#':
                 continue
                 
+            # Quick C-level prefix check to bypass expensive line splitting
+            is_target = line.startswith(prefix1) or line.startswith(prefix2)
+            
+            if not is_target:
+                if entered_chrom:
+                    # Sorted VCF: we finished reading target chromosome block, break early
+                    break
+                continue
+                
+            entered_chrom = True
+            parts = line.strip().split('\t')
             pos = int(parts[1])
+            
+            if pos < min_pos:
+                continue
+            if pos > max_pos:
+                # Sorted positions: coordinate window exceeded, break early
+                break
+                
             ref = parts[3]
             alt = parts[4]
             info = parts[7]
             
-            # Estimate variant size boundary
             var_len = max(len(ref), len(alt))
             
-            # Parse allele frequency (AF) from INFO tag, default to 0.50
             af = 0.50
             if "AF=" in info:
                 for tag in info.split(';'):
@@ -52,9 +66,9 @@ def load_giab_variants(vcf_path, chr_id):
             
             variants.append((pos, pos + var_len, af))
             
-    # Sort variants by genomic start position for fast search
+    # Sort variants by genomic start position
     variants.sort(key=lambda x: x[0])
-    print(f"SUCCESS: Loaded {len(variants)} real VCF variants for Chromosome {chr_id}.")
+    print(f"SUCCESS: Loaded {len(variants)} real VCF variants overlapping range [{min_pos}, {max_pos}] for Chromosome {chr_id}.")
     return variants
 
 def parse_gfa(gfa_path):
@@ -152,7 +166,9 @@ def parse_gfa(gfa_path):
 
     # 3. Load VCF variants (raises FileNotFoundError if VCF is missing)
     vcf_path = os.path.abspath(os.path.join(os.path.dirname(gfa_path), "variants.vcf.gz"))
-    real_variants = load_giab_variants(vcf_path, chr_id)
+    min_pos = min(c[0] for c in node_coords.values()) if node_coords else 0
+    max_pos = max(c[1] for c in node_coords.values()) if node_coords else 0
+    real_variants = load_giab_variants(vcf_path, chr_id, min_pos, max_pos)
     
     # 4. Intersect GFA nodes with VCF variants to assign ground-truth labels
     nodes = []
