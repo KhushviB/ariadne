@@ -159,11 +159,11 @@ export default function Visualizer3D({
     let animationFrameId: number;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      
+
       if (!isDragging) {
         objectsGroup.rotation.y += 0.001; // slow auto spin
       }
-      
+
       renderer.render(scene, camera);
     };
     animate();
@@ -214,7 +214,7 @@ export default function Visualizer3D({
     const steps = 120;
     const amplitude = 1.8;      // spiral width
     const frequency = 0.45;     // tightness of spiral
-    
+
     const helixPoints1: THREE.Vector3[] = [];
     const helixPoints2: THREE.Vector3[] = [];
 
@@ -240,7 +240,8 @@ export default function Visualizer3D({
     });
     const strand1 = new THREE.Mesh(helixGeom1, helixMat1);
     group.add(strand1);
-    const helixCurve2 = new THREE.CatmullRomCurve3(helixPoints2);
+
+    const helixCurve2 = new THREE.CatmullRomCurve3(helixPoints2);
     const helixGeom2 = new THREE.TubeGeometry(helixCurve2, 100, 0.12, 8, false);
     const strand2 = new THREE.Mesh(helixGeom2, helixMat1);
     group.add(strand2);
@@ -249,10 +250,10 @@ export default function Visualizer3D({
     for (let i = 4; i < steps; i += 4) {
       const p1 = helixPoints1[i];
       const p2 = helixPoints2[i];
-      
+
       const rungGeom = new THREE.CylinderGeometry(0.05, 0.05, p1.distanceTo(p2), 6);
       const rung = new THREE.Mesh(rungGeom, helixMat1);
-      
+
       // Position and orient cylinder between points
       const position = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
       rung.position.copy(position);
@@ -344,8 +345,8 @@ export default function Visualizer3D({
       const end = new THREE.Vector3(targetNode.x, targetNode.y, targetNode.z);
       const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
 
-      const isVariantLink = sourceNode.type.includes('Variant') || sourceNode.type.includes('Slot') ||
-                            targetNode.type.includes('Variant') || targetNode.type.includes('Slot');
+      const isVariantLink = (sourceNode.type && (sourceNode.type.includes('Variant') || sourceNode.type.includes('Slot'))) ||
+        (targetNode.type && (targetNode.type.includes('Variant') || targetNode.type.includes('Slot')));
       let controlPoint: THREE.Vector3;
 
       if (isVariantLink) {
@@ -392,7 +393,7 @@ export default function Visualizer3D({
       let baseRadius = 0.12;
       let baseHeight = 0.35;
 
-      if (node.type.includes('Variant') || node.type.includes('Slot')) {
+      if (node.type && (node.type.includes('Variant') || node.type.includes('Slot'))) {
         baseRadius = 0.20;
         baseHeight = 0.65;
       }
@@ -402,13 +403,13 @@ export default function Visualizer3D({
       let color = 0x64748b;
       let emissive = 0x000000;
 
-      if (node.type.includes('Insertion')) {
+      if (node.type && node.type.includes('Insertion')) {
         color = 0x059669;
         emissive = 0x047857;
-      } else if (node.type.includes('Deletion')) {
+      } else if (node.type && node.type.includes('Deletion')) {
         color = 0xdb2777;
         emissive = 0x9d174d;
-      } else if (node.type.includes('Polymorphic') || node.type.includes('Translocation') || node.type.includes('Pathogenic')) {
+      } else if (node.type && (node.type.includes('Polymorphic') || node.type.includes('Translocation') || node.type.includes('Pathogenic'))) {
         color = 0x7c3aed;
         emissive = 0x5b21b6;
       } else {
@@ -435,7 +436,7 @@ export default function Visualizer3D({
 
       const capsule = new THREE.Mesh(geometry, material);
       capsule.position.set(node.x, node.y, node.z);
-      
+
       // Stand capsules vertically to create clear visual spacing gaps
       capsule.rotation.z = 0;
       group.add(capsule);
@@ -447,7 +448,8 @@ export default function Visualizer3D({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
       {/* Floating Biological Legend Overlay */}
       <div className="glass-panel" style={{
         position: 'absolute',

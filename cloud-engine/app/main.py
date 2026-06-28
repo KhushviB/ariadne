@@ -26,7 +26,7 @@ app.add_middleware(
 
 # 1. API Payload Contracts
 class GraphCoordinatePayload(BaseModel):
-    nodes: List[Dict[str, float]]        # Contains [{"id": float, "x": float, "y": float, "z": float}, ...]
+    nodes: List[Dict[str, Any]]          # Contains [{"id": float, "type": str, "x": float, "y": float, "z": float}, ...]
     edges: List[Dict[str, Any]]          # Contains [{"source": int, "target": int, "cohorts": [...]}, ...]
     attention_weights: List[float]       # Quantized normalized scalars for glowing effects
     clinical_annotations: Dict[str, str] # ClinVar variant mappings for the sidebar (rsID -> description)
@@ -257,6 +257,7 @@ def get_subgraph(
         for n in chr_data['nodes']:
             nodes_payload.append({
                 "id": float(n['id']),
+                "type": n.get("type", "Reference"),
                 "x": float(n['x']),
                 "y": float(n['y']),
                 "z": float(n['z'])
