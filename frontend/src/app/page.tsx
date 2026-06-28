@@ -17,11 +17,10 @@ export default function Dashboard() {
   const [showAttention, setShowAttention] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogMessage[]>([]);
-
-  // States for coordinates and annotations (fallback initialized with mock)
-  const [nodes, setNodes] = useState<any[]>(mockGraphData.chromosomes['21'].nodes);
-  const [edges, setEdges] = useState<any[]>(mockGraphData.chromosomes['21'].edges);
-  const [annotations, setAnnotations] = useState<any>(mockGraphData.chromosomes['21'].clinical_annotations);
+  const [chromosomes, setChromosomes] = useState<any[]>([
+    { id: '21', name: 'Chromosome 21', base_pairs: 46700000 },
+    { id: '22', name: 'Chromosome 22', base_pairs: 50800000 }
+  ]);
 
   // Function to add diagnostic logs with timestamp
   const logMessage = useCallback((text: string, type: 'success' | 'info' | 'warning' = 'info') => {
@@ -36,6 +35,27 @@ export default function Dashboard() {
     logMessage('System ready. Downsampled Chromosomes 21 and 22 loaded.', 'info');
   }, [logMessage]);
 
+  // Fetch available chromosomes from API
+  useEffect(() => {
+    const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const apiBaseUrl = rawApiUrl.replace(/\/$/, '');
+    if (apiBaseUrl) {
+      fetch(`${apiBaseUrl}/api/chromosomes`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.chromosomes) {
+            setChromosomes(data.chromosomes);
+          }
+        })
+        .catch(err => console.error("Failed to fetch chromosomes list:", err));
+    }
+  }, []);
+
+  // States for coordinates and annotations (fallback initialized with mock)
+  const [nodes, setNodes] = useState<any[]>(mockGraphData.chromosomes['21'].nodes);
+  const [edges, setEdges] = useState<any[]>(mockGraphData.chromosomes['21'].edges);
+  const [annotations, setAnnotations] = useState<any>(mockGraphData.chromosomes['21'].clinical_annotations);
+
   // Fetch coordinates dynamically from remote API when available
   const [imputationResult, setImputationResult] = useState<any>(null);
 
@@ -45,7 +65,7 @@ export default function Dashboard() {
     
     if (!apiBaseUrl) {
       // Use local static mock data
-      const chrData = mockGraphData.chromosomes[selectedChr as '21' | '22'];
+      const chrData = (mockGraphData.chromosomes as any)[selectedChr] || mockGraphData.chromosomes['21'];
       setNodes(chrData.nodes);
       setEdges(chrData.edges);
       setAnnotations(chrData.clinical_annotations);
@@ -100,7 +120,7 @@ export default function Dashboard() {
       })
       .catch(err => {
         logMessage(`Cloud link failed: ${err.message}. Initializing localized baseline mapping database...`, 'warning');
-        const chrData = mockGraphData.chromosomes[selectedChr as '21' | '22'];
+        const chrData = (mockGraphData.chromosomes as any)[selectedChr] || mockGraphData.chromosomes['21'];
         setNodes(chrData.nodes);
         setEdges(chrData.edges);
         setAnnotations(chrData.clinical_annotations);
@@ -212,6 +232,7 @@ export default function Dashboard() {
         <Sidebar
           selectedChr={selectedChr}
           onChangeChr={handleChrChange}
+          chromosomes={chromosomes}
           selectedCohort={selectedCohort}
           onChangeCohort={handleCohortChange}
           showAttention={showAttention}

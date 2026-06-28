@@ -105,6 +105,8 @@ def load_real_gfa_graphs():
                             "attention": 0.0,
                             "cohorts": edge_cohorts
                         })
+                    else:
+                        break
 
         # Keep edges connecting only active loaded nodes
         edges = [e for e in edges if e['source'] in node_ids and e['target'] in node_ids]

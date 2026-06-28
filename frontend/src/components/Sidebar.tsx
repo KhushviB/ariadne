@@ -27,6 +27,7 @@ interface LogMessage {
 interface SidebarProps {
   selectedChr: string;
   onChangeChr: (chr: string) => void;
+  chromosomes: Array<{ id: string; name: string; base_pairs: number }>;
   selectedCohort: string;
   onChangeCohort: (cohort: string) => void;
   showAttention: boolean;
@@ -43,6 +44,7 @@ interface SidebarProps {
 export default function Sidebar({
   selectedChr,
   onChangeChr,
+  chromosomes,
   selectedCohort,
   onChangeCohort,
   showAttention,
@@ -115,28 +117,24 @@ export default function Sidebar({
         <h3 className="panel-title">Clinical Cohort & Target Gene Selector</h3>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Chromosome Toggle */}
+          {/* Target Chromosome Selector */}
           <div className="slider-group">
             <label className="slider-label">
               <span>Target Chromosome</span>
               <span className="logo-badge">GRCh38 / HPRC</span>
             </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button 
-                className={`control-btn ${selectedChr === '21' ? 'active' : ''}`}
-                onClick={() => onChangeChr('21')}
-                style={{ flex: 1 }}
-              >
-                Chr 21 (46.7M bp)
-              </button>
-              <button 
-                className={`control-btn ${selectedChr === '22' ? 'active' : ''}`}
-                onClick={() => onChangeChr('22')}
-                style={{ flex: 1 }}
-              >
-                Chr 22 (50.8M bp)
-              </button>
-            </div>
+            <select 
+              value={selectedChr}
+              onChange={(e) => onChangeChr(e.target.value)}
+              className="control-btn"
+              style={{ width: '100%', background: 'hsl(var(--bg-deep))', padding: '8px' }}
+            >
+              {chromosomes.map(chr => (
+                <option key={chr.id} value={chr.id}>
+                  {chr.name} ({(chr.base_pairs / 1000000).toFixed(1)}M bp)
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Haplotype Cohort Selector */}
