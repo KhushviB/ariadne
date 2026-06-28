@@ -10,17 +10,27 @@ def split_vcf_once(vcf_path, data_dir):
     """
     Splits the main whole-genome VCF file into chromosome-specific TSV files
     in a single pass using a fast, C-accelerated gunzip | awk piped command.
+    Filters variants to only keep those within the active pangenome window [900kb, 5Mb]
+    to prevent Python from looping over millions of out-of-bounds SNPs.
     """
-    print(f"[VCF PARTITIONER] Starting single-pass partition sweep of VCF: {vcf_path}...", flush=True)
-    print(f"[VCF PARTITIONER] Writing outputs to directory: {data_dir}...", flush=True)
+    print("One-time optimization: Partitioning whole-genome VCF in a single pass using C-accelerated awk...", flush=True)
     
     # Clean up any old, bulky TSV files from previous attempts
     for f in glob.glob(os.path.join(data_dir, "variants_*.tsv")):
         try:
             print(f"[VCF PARTITIONER] Removing older legacy cache file: {f}...", flush=True)
             os.remove(f)
+        except Exception:
+            pass
+            
+    # Pre-create all 22 chromosome files to prevent FileNotFoundError on chromosomes with 0 variants in window
+    for chrom in range(1, 23):
+        tsv_path = os.path.join(data_dir, f"variants_{chrom}.tsv")
+        try:
+            with open(tsv_path, 'w') as f:
+                f.write("pos\tend_pos\tAF\n")
         except Exception as e:
-            print(f"[VCF PARTITIONER] Warning: Failed to remove {f}: {e}", flush=True)
+            print(f"[VCF PARTITIONER] Warning: Failed to pre-create empty {tsv_path}: {e}", flush=True)
             
     safe_data_dir = data_dir.replace('\\', '/')
     
