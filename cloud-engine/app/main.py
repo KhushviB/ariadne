@@ -108,22 +108,53 @@ def load_real_gfa_graphs():
                         if len(edges) >= 120:
                             break
         
+        # Build adjacency maps for GFA structure
+        out_edges = {}
+        in_edges = {}
+        for e in edges:
+            src, tgt = int(e['source']), int(e['target'])
+            out_edges.setdefault(src, []).append(tgt)
+            in_edges.setdefault(tgt, []).append(src)
+
         # Calculate beautiful 3D coordinates along a helical pangenome corridor
         total_nodes = len(nodes)
         if total_nodes > 0:
             for idx, n in enumerate(nodes):
+                node_id = int(n['id'])
                 pct = idx / total_nodes
                 x_coord = pct * 60 - 30 # X spreads from -30 to +30
                 theta = x_coord * 0.45
                 
-                # Alternating coordinates to show alternate structural paths
-                if n["type"] == "Structural Variant Slot":
-                    y_coord = 2.5 * math.sin(theta) + (3.0 if idx % 2 == 0 else -3.0)
-                    z_coord = 2.5 * math.cos(theta) + (3.0 if idx % 3 == 0 else -3.0)
+                # Check if this node is an alternative pathway branch
+                parents = in_edges.get(node_id, [])
+                branch_idx = 0
+                num_branches = 1
+                
+                for p in parents:
+                    p_targets = out_edges.get(p, [])
+                    if len(p_targets) > 1:
+                        # Found a branching fork
+                        branch_idx = p_targets.index(node_id)
+                        num_branches = len(p_targets)
+                        break
+                
+                # Dynamic layout calculation driven by actual GFA connectivity
+                if branch_idx > 0:
+                    # Alternative variant loop path: offset radially away from reference helix
+                    angle_offset = branch_idx * (2 * math.pi / num_branches)
+                    # Rotate the normal vector to create a distinct branching arch
+                    y_coord = 1.8 * math.sin(theta) + 3.0 * math.sin(theta + angle_offset)
+                    z_coord = 1.8 * math.cos(theta) + 3.0 * math.cos(theta + angle_offset)
+                    # Mark the node type dynamically based on its structural branch index
+                    n["type"] = "Structural Variant Slot"
                 else:
+                    # Canonical reference backbone path
                     y_coord = 1.8 * math.sin(theta)
                     z_coord = 1.8 * math.cos(theta)
-                    
+                    # Default type if not already marked
+                    if "type" not in n or n["type"] == "Variant":
+                        n["type"] = "Reference"
+
                 n["x"] = round(x_coord, 3)
                 n["y"] = round(y_coord, 3)
                 n["z"] = round(z_coord, 3)

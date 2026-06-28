@@ -240,8 +240,7 @@ export default function Visualizer3D({
     });
     const strand1 = new THREE.Mesh(helixGeom1, helixMat1);
     group.add(strand1);
-
-    const helixCurve2 = new THREE.CatmullRomCurve3(helixPoints2);
+    const helixCurve2 = new THREE.CatmullRomCurve3(helixPoints2);
     const helixGeom2 = new THREE.TubeGeometry(helixCurve2, 100, 0.12, 8, false);
     const strand2 = new THREE.Mesh(helixGeom2, helixMat1);
     group.add(strand2);
@@ -272,93 +271,105 @@ export default function Visualizer3D({
       if (!sourceNode || !targetNode) return;
 
       const cohorts = edge.cohorts || ['Global'];
-      let color = 0x475569; // Rich slate fallback (highly visible)
-      let thickness = 0.05; // Visible fiber-optic baseline
+      let color = 0x475569; // Rich slate fallback
+      let thickness = 0.05;
       let opacity = 0.55;
 
       if (showAttention) {
         if (edge.attention > 0.8) {
-          color = 0xdb2777; // Pathological path (Vibrant Magenta glow)
+          color = 0xdb2777; // Pathological path
           thickness = 0.22;
           opacity = 0.95;
         } else if (edge.attention > 0.5) {
-          color = 0x0284c7; // Imputed transition (Vibrant Sky Blue)
+          color = 0x0284c7; // Imputed transition
           thickness = 0.15;
           opacity = 0.85;
         } else {
-          color = 0x4f46e5; // Background connection (Vibrant Indigo)
+          color = 0x4f46e5; // Background connection
           thickness = 0.07;
           opacity = 0.5;
         }
       } else {
-        // Multi-colored cohort ribbons in global view
         if (selectedCohort === 'all') {
           if (cohorts.includes('African')) {
-            color = 0x059669; // Saturated Green
+            color = 0x059669;
             thickness = 0.08;
             opacity = 0.8;
           } else if (cohorts.includes('Ashkenazi')) {
-            color = 0xd97706; // Saturated Amber
+            color = 0xd97706;
             thickness = 0.08;
             opacity = 0.8;
           } else if (cohorts.includes('East_Asian')) {
-            color = 0x7c3aed; // Saturated Purple
+            color = 0x7c3aed;
             thickness = 0.08;
             opacity = 0.8;
           } else if (cohorts.includes('European')) {
-            color = 0x0284c7; // Saturated Sky Blue
+            color = 0x0284c7;
             thickness = 0.08;
             opacity = 0.8;
           } else {
-            color = 0x475569; // Dark Slate
+            color = 0x475569;
             thickness = 0.06;
             opacity = 0.6;
           }
         } else {
-          // Highlight selected cohort paths, fade others out but keep them visible as thin colored threads
           if (cohorts.includes('African') && selectedCohort === 'African') {
-            color = 0x059669; // Saturated Green
+            color = 0x059669;
             thickness = 0.18;
             opacity = 0.95;
           } else if (cohorts.includes('Ashkenazi') && selectedCohort === 'Ashkenazi') {
-            color = 0xd97706; // Saturated Amber
+            color = 0xd97706;
             thickness = 0.18;
             opacity = 0.95;
           } else if (cohorts.includes('East_Asian') && selectedCohort === 'East_Asian') {
-            color = 0x7c3aed; // Saturated Purple
+            color = 0x7c3aed;
             thickness = 0.18;
             opacity = 0.95;
           } else if (cohorts.includes('European') && selectedCohort === 'European') {
-            color = 0x0284c7; // Saturated Sky blue
+            color = 0x0284c7;
             thickness = 0.18;
             opacity = 0.95;
           } else {
-            // Keep background edges thin but colored and visible (instead of blending in)
             if (cohorts.includes('African')) color = 0x059669;
             else if (cohorts.includes('Ashkenazi')) color = 0xd97706;
             else if (cohorts.includes('East_Asian')) color = 0x7c3aed;
             else if (cohorts.includes('European')) color = 0x0284c7;
-            
             thickness = 0.03;
             opacity = 0.25;
           }
         }
       }
 
-      // Draw thick 3D Tubes instead of flat 2D lines for premium clinical mapping
       const start = new THREE.Vector3(sourceNode.x, sourceNode.y, sourceNode.z);
       const end = new THREE.Vector3(targetNode.x, targetNode.y, targetNode.z);
-      
       const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-      const normal = new THREE.Vector3(
-        -(end.y - start.y),
-        (end.x - start.x),
-        0
-      ).normalize().multiplyScalar(3.5 * (edge.source % 2 === 0 ? 1 : -1));
-      
-      const controlPoint = new THREE.Vector3().addVectors(mid, normal);
+
+      const isVariantLink = sourceNode.type.includes('Variant') || sourceNode.type.includes('Slot') ||
+                            targetNode.type.includes('Variant') || targetNode.type.includes('Slot');
+      let controlPoint: THREE.Vector3;
+
+      if (isVariantLink) {
+        let offsetVec = new THREE.Vector3(
+          0,
+          mid.y - (1.8 * Math.sin(mid.x * 0.45)),
+          mid.z - (1.8 * Math.cos(mid.x * 0.45))
+        );
+        if (offsetVec.length() < 0.1) {
+          offsetVec.set(0, 3.5, 0);
+        } else {
+          offsetVec.normalize().multiplyScalar(4.0);
+        }
+        controlPoint = new THREE.Vector3().addVectors(mid, offsetVec);
+      } else {
+        const normal = new THREE.Vector3(
+          -(end.y - start.y),
+          (end.x - start.x),
+          0
+        ).normalize().multiplyScalar(0.15);
+        controlPoint = new THREE.Vector3().addVectors(mid, normal);
+      }
+
       const curve = new THREE.QuadraticBezierCurve3(start, controlPoint, end);
-      
       const tubeGeom = new THREE.TubeGeometry(curve, 20, thickness, 8, false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: color,
@@ -375,11 +386,9 @@ export default function Visualizer3D({
       group.add(tube);
     });
 
-    // Render Nodes as sequence block capsules
+    // Render Nodes
     nodes.forEach(node => {
       const isSelected = node.id === selectedNodeId;
-      
-      // Determine dynamic base sizing (thicker for structural variants)
       let baseRadius = 0.12;
       let baseHeight = 0.35;
 
@@ -390,27 +399,26 @@ export default function Visualizer3D({
 
       let radius = isSelected ? baseRadius * 1.5 : baseRadius;
       let height = isSelected ? baseHeight * 1.4 : baseHeight;
-      
-      let color = 0x64748b; // Slate reference base
+      let color = 0x64748b;
       let emissive = 0x000000;
 
       if (node.type.includes('Insertion')) {
-        color = 0x059669; // Emerald block
+        color = 0x059669;
         emissive = 0x047857;
       } else if (node.type.includes('Deletion')) {
-        color = 0xdb2777; // Rose/Magenta block
+        color = 0xdb2777;
         emissive = 0x9d174d;
       } else if (node.type.includes('Polymorphic') || node.type.includes('Translocation') || node.type.includes('Pathogenic')) {
-        color = 0x7c3aed; // Purple hypervariable block
+        color = 0x7c3aed;
         emissive = 0x5b21b6;
       } else {
-        color = 0x0284c7; // Sky blue reference block
+        color = 0x0284c7;
         emissive = 0x0369a1;
       }
 
       if (isSelected) {
         color = 0xffffff;
-        emissive = 0xdb2777; // Magenta glow border selection
+        emissive = 0xdb2777;
       }
 
       // Capsule geometry standing upright (polymath bio style)
@@ -439,7 +447,6 @@ export default function Visualizer3D({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       
       {/* Floating Biological Legend Overlay */}
       <div className="glass-panel" style={{
