@@ -179,21 +179,34 @@ def parse_gfa(gfa_path):
     current_pos = chr_start_offset if chr_start_offset > 0 else 1000000
     node_seqs = {nid: seq for nid, seq in raw_nodes}
     
+    # Map reference path nodes
     for nid in ref_path_nodes:
         if nid in node_seqs:
             seq_len = len(node_seqs[nid])
             node_coords[nid] = (current_pos, current_pos + seq_len)
             current_pos += seq_len
 
+    # Build adjacency index for constant-time neighbor lookups in O(E)
+    print("[GFA PARSER] Building adjacency map...", flush=True)
+    adj = {}
+    for src, tgt in edges_raw:
+        if src not in adj:
+            adj[src] = []
+        adj[src].append(tgt)
+        if tgt not in adj:
+            adj[tgt] = []
+        adj[tgt].append(src)
+    print(f"[GFA PARSER] Adjacency map indexed with {len(adj)} nodes.", flush=True)
+
+    # Align variant nodes that branched off the main path in O(N)
+    print("[GFA PARSER] Aligning branch node coordinates...", flush=True)
     for nid, seq in raw_nodes:
         if nid not in node_coords:
             adjacent_ref = None
-            for src, tgt in edges_raw:
-                if src == nid and tgt in node_coords:
-                    adjacent_ref = tgt
-                    break
-                elif tgt == nid and src in node_coords:
-                    adjacent_ref = src
+            # Constant-time lookup of neighbors
+            for neighbor in adj.get(nid, []):
+                if neighbor in node_coords:
+                    adjacent_ref = neighbor
                     break
             
             if adjacent_ref is not None:
@@ -202,6 +215,7 @@ def parse_gfa(gfa_path):
             else:
                 node_coords[nid] = (current_pos, current_pos + len(seq))
                 current_pos += len(seq)
+    print("[GFA PARSER] Branch node coordinates successfully aligned.", flush=True)
 
     # 3. Load VCF variants (raises FileNotFoundError if VCF is missing)
     vcf_path = os.path.abspath(os.path.join(os.path.dirname(gfa_path), "variants.vcf.gz"))
