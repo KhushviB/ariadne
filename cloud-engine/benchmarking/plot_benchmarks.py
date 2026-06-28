@@ -143,7 +143,8 @@ def generate_benchmark_plots():
     # =========================================================================
     # PLOT 3: COHORT BIAS / ROBUSTNESS COMPARISON (F1-SCORE BY ETHNICITY)
     # =========================================================================
-    ethnicities = ['European', 'African', 'East Asian', 'Ashkenazi']
+    ethnicities = ['European', 'African', 'East_Asian', 'Ashkenazi']
+    labels = ['European', 'African', 'East Asian', 'Ashkenazi']
     bwa_cohort = [cohorts_data[eth]['BWA-MEM'] for eth in ethnicities]
     vg_cohort = [cohorts_data[eth]['VG-Giraffe'] for eth in ethnicities]
     pan_cohort = [cohorts_data[eth]['PanGNN'] for eth in ethnicities]
@@ -161,7 +162,7 @@ def generate_benchmark_plots():
     ax.set_title('Cross-Cohort Pathological Detection Robustness\n(Demonstrating Mitigation of Reference Haplotype Bias)', 
                  fontsize=12, fontweight='bold', pad=15)
     ax.set_xticks(x_cohort)
-    ax.set_xticklabels(ethnicities, fontsize=10, fontweight='bold')
+    ax.set_xticklabels(labels, fontsize=10, fontweight='bold')
     ax.set_ylim(0, 110)
     ax.legend(frameon=True, facecolor='#ffffff', edgecolor='#e2e8f0', framealpha=0.95, fontsize=9.5, loc='upper left')
 
