@@ -47,10 +47,21 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     """
     Queries variant coordinates and allele frequencies from the GIAB VCF file.
     Uses partitioned chromosome-specific TSV files to achieve millisecond load speeds.
+    Detects and deletes bulky legacy cache files to force optimized partitioning.
     """
     data_dir = os.path.dirname(vcf_path)
     chrom_tsv_path = os.path.join(data_dir, f"variants_{chr_id}.tsv")
     
+    # Auto-detect and remove legacy bulky caches (> 2 MB) from previous runs
+    if os.path.exists(chrom_tsv_path):
+        file_size = os.path.getsize(chrom_tsv_path)
+        if file_size > 2 * 1024 * 1024:
+            print(f"Legacy bulky cache detected for Chromosome {chr_id} ({file_size / 1024 / 1024:.2f} MB). Removing to force optimized split...")
+            try:
+                os.remove(chrom_tsv_path)
+            except Exception:
+                pass
+                
     # If the chromosome partition TSV is missing, partition the whole-genome VCF in a single pass
     if not os.path.exists(chrom_tsv_path):
         if not os.path.exists(vcf_path):
