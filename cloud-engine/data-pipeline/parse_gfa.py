@@ -2,23 +2,34 @@ import os
 import json
 import gzip
 import random
+import glob
 import subprocess
 
 def split_vcf_once(vcf_path, data_dir):
     """
     Splits the main whole-genome VCF file into chromosome-specific TSV files
     in a single pass using a fast, C-accelerated gunzip | awk piped command.
-    This takes ~30 seconds for the entire 1.5 GB dataset.
+    Filters variants to only keep those within the active pangenome window [900kb, 5Mb]
+    to prevent Python from looping over millions of out-of-bounds SNPs.
     """
     print("One-time optimization: Partitioning whole-genome VCF in a single pass using C-accelerated awk...")
+    
+    # Clean up any old, bulky TSV files from previous attempts
+    for f in glob.glob(os.path.join(data_dir, "variants_*.tsv")):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+            
     safe_data_dir = data_dir.replace('\\', '/')
     
-    # awk script to parse columns 2 (POS), 4 (REF), 5 (ALT), and 8 (INFO) 
-    # and redirect directly to chromosome-specific files (e.g. variants_17.tsv)
+    # awk script to parse columns 2 (POS), 4 (REF), 5 (ALT), and 8 (INFO)
+    # and filter for pos >= 900,000 and pos <= 5,000,000 before redirecting
     awk_script = (
         '!/^#/ {'
         '  chrom=$1; gsub(/^chr/, "", chrom);'
-        '  if (chrom ~ /^[0-9]+$/ && chrom >= 1 && chrom <= 22) {'
+        '  pos=int($2);'
+        '  if (chrom ~ /^[0-9]+$/ && chrom >= 1 && chrom <= 22 && pos >= 900000 && pos <= 5000000) {'
         '    out="' + safe_data_dir + '/variants_" chrom ".tsv";'
         '    print $2 "\t" $4 "\t" $5 "\t" $8 > out;'
         '  }'
@@ -50,7 +61,7 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
         split_vcf_once(vcf_path, data_dir)
         
     variants = []
-    # Read the tiny chromosome partition file
+    # Read the tiny chromosome partition file (now only contains coordinates in our target range)
     with open(chrom_tsv_path, 'r') as f:
         for line in f:
             parts = line.strip().split('\t')
