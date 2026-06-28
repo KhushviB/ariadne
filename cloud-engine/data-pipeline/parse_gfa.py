@@ -3,71 +3,85 @@ import json
 import gzip
 import random
 
-def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
+def split_vcf_once(vcf_path, data_dir):
     """
-    Parses variant coordinates and allele frequencies from the GIAB VCF file.
-    If the VCF file is missing, raises FileNotFoundError.
-    Optimized for fast chromosome scanning and coordinate range breaks.
+    Partitions the large whole-genome VCF file into tiny chromosome-specific TSV files.
+    This runs exactly once (single pass) to index positions and allele frequencies.
     """
-    if not os.path.exists(vcf_path):
-        raise FileNotFoundError(
-            f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'. "
-            f"Real biological variant mapping requires this file. Please run ingest.py first."
-        )
-        
-    variants = []
-    print(f"Parsing GIAB HG002 benchmark variants from VCF: {vcf_path}...")
-    
+    print(f"One-time optimization: Partitioning GIAB VCF by chromosome for rapid queries...")
     open_func = gzip.open if vcf_path.endswith('.gz') else open
     mode = 'rt' if vcf_path.endswith('.gz') else 'r'
     
-    prefix1 = f"chr{chr_id}\t"
-    prefix2 = f"{chr_id}\t"
+    writers = {}
+    try:
+        with open_func(vcf_path, mode) as f:
+            for line in f:
+                if line[0] == '#':
+                    continue
+                parts = line.strip().split('\t')
+                chrom = parts[0].replace("chr", "")
+                
+                # Index autosomes 1-22
+                if not chrom.isdigit() or not (1 <= int(chrom) <= 22):
+                    continue
+                    
+                pos = int(parts[1])
+                ref = parts[3]
+                alt = parts[4]
+                info = parts[7]
+                var_len = max(len(ref), len(alt))
+                
+                af = 0.50
+                if "AF=" in info:
+                    for tag in info.split(';'):
+                        if tag.startswith("AF="):
+                            try:
+                                af = float(tag.split('=')[1].split(',')[0])
+                            except Exception:
+                                af = 0.50
+                                
+                if chrom not in writers:
+                    out_path = os.path.join(data_dir, f"variants_{chrom}.tsv")
+                    writers[chrom] = open(out_path, 'w')
+                    writers[chrom].write("pos\tend_pos\tAF\n")
+                    
+                writers[chrom].write(f"{pos}\t{pos + var_len}\t{af:.4f}\n")
+    finally:
+        for w in writers.values():
+            w.close()
+    print("VCF partitioning completed successfully.")
+
+def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
+    """
+    Parses variant coordinates and allele frequencies from the GIAB VCF file.
+    Uses partitioned chromosome-specific TSV files to achieve millisecond load speeds.
+    """
+    data_dir = os.path.dirname(vcf_path)
+    chrom_tsv_path = os.path.join(data_dir, f"variants_{chr_id}.tsv")
     
-    with open_func(vcf_path, mode) as f:
-        entered_chrom = False
+    # If the partition file is missing, perform the one-time split of the main VCF
+    if not os.path.exists(chrom_tsv_path):
+        if not os.path.exists(vcf_path):
+            raise FileNotFoundError(
+                f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'. "
+                f"Real biological variant mapping requires this file. Please run ingest.py first."
+            )
+        split_vcf_once(vcf_path, data_dir)
+        
+    variants = []
+    # Read the tiny chromosome partition file
+    with open(chrom_tsv_path, 'r') as f:
+        header = f.readline() # Skip header
         for line in f:
-            if line[0] == '#':
-                continue
-                
-            # Quick C-level prefix check to bypass expensive line splitting
-            is_target = line.startswith(prefix1) or line.startswith(prefix2)
-            
-            if not is_target:
-                if entered_chrom:
-                    # Sorted VCF: we finished reading target chromosome block, break early
-                    break
-                continue
-                
-            entered_chrom = True
             parts = line.strip().split('\t')
-            pos = int(parts[1])
+            pos = int(parts[0])
+            end = int(parts[1])
+            af = float(parts[2])
             
-            if pos < min_pos:
-                continue
-            if pos > max_pos:
-                # Sorted positions: coordinate window exceeded, break early
-                break
+            # Match overlapping coordinates
+            if max(min_pos, pos) < min(max_pos, end):
+                variants.append((pos, end, af))
                 
-            ref = parts[3]
-            alt = parts[4]
-            info = parts[7]
-            
-            var_len = max(len(ref), len(alt))
-            
-            af = 0.50
-            if "AF=" in info:
-                for tag in info.split(';'):
-                    if tag.startswith("AF="):
-                        try:
-                            af = float(tag.split('=')[1].split(',')[0])
-                        except Exception:
-                            af = 0.50
-            
-            variants.append((pos, pos + var_len, af))
-            
-    # Sort variants by genomic start position
-    variants.sort(key=lambda x: x[0])
     print(f"SUCCESS: Loaded {len(variants)} real VCF variants overlapping range [{min_pos}, {max_pos}] for Chromosome {chr_id}.")
     return variants
 
@@ -83,8 +97,6 @@ def parse_gfa(gfa_path):
     raw_nodes = []
     edges_raw = []
     ref_path_nodes = []
-    
-    # Track chromosome start offset (e.g. if parsed from path metadata)
     chr_start_offset = 0
     
     with open(gfa_path, 'r') as f:
@@ -104,7 +116,6 @@ def parse_gfa(gfa_path):
                 edges_raw.append((source, target))
                 
             elif parts[0] == 'P':
-                # GFA v1.0 Path Line: P [PathName] [SegmentNames] [Overlaps]
                 path_name = parts[1].replace("chr", "").replace("GRCh38.", "")
                 if path_name == str(chr_id):
                     steps = parts[2].split(',')
@@ -113,14 +124,12 @@ def parse_gfa(gfa_path):
                         ref_path_nodes.append(node_id)
                         
             elif parts[0] == 'W':
-                # GFA v1.1 Walk Line: W [Sample] [Index] [SeqID] [SeqStart] [SeqEnd] [Nodes]
                 seq_id = parts[3].replace("chr", "").replace("GRCh38.", "")
                 if seq_id == str(chr_id):
                     try:
                         chr_start_offset = int(parts[4])
                     except ValueError:
                         chr_start_offset = 0
-                    # Nodes are listed consecutively e.g. >1<2>3
                     nodes_list = parts[6].replace('<', '>').split('>')
                     for node_item in nodes_list:
                         if node_item:
@@ -138,14 +147,12 @@ def parse_gfa(gfa_path):
     current_pos = chr_start_offset if chr_start_offset > 0 else 1000000
     node_seqs = {nid: seq for nid, seq in raw_nodes}
     
-    # Map reference path nodes
     for nid in ref_path_nodes:
         if nid in node_seqs:
             seq_len = len(node_seqs[nid])
             node_coords[nid] = (current_pos, current_pos + seq_len)
             current_pos += seq_len
 
-    # Align variant nodes that branched off the main path
     for nid, seq in raw_nodes:
         if nid not in node_coords:
             adjacent_ref = None
@@ -185,7 +192,6 @@ def parse_gfa(gfa_path):
         node_type = "Reference"
         frequency = 1.0
         
-        # Mark as variant if coordinate overlaps with real VCF variant record
         if overlap_variant is not None:
             node_type = "Structural Variant Slot"
             frequency = overlap_variant
