@@ -2,74 +2,72 @@ import os
 import json
 import gzip
 import random
-
-def split_vcf_once(vcf_path, data_dir):
-    """
-    Partitions the large whole-genome VCF file into tiny chromosome-specific TSV files.
-    This runs exactly once (single pass) to index positions and allele frequencies.
-    """
-    print(f"One-time optimization: Partitioning GIAB VCF by chromosome for rapid queries...")
-    open_func = gzip.open if vcf_path.endswith('.gz') else open
-    mode = 'rt' if vcf_path.endswith('.gz') else 'r'
-    
-    writers = {}
-    try:
-        with open_func(vcf_path, mode) as f:
-            for line in f:
-                if line[0] == '#':
-                    continue
-                parts = line.strip().split('\t')
-                chrom = parts[0].replace("chr", "")
-                
-                # Index autosomes 1-22
-                if not chrom.isdigit() or not (1 <= int(chrom) <= 22):
-                    continue
-                    
-                pos = int(parts[1])
-                ref = parts[3]
-                alt = parts[4]
-                info = parts[7]
-                var_len = max(len(ref), len(alt))
-                
-                af = 0.50
-                if "AF=" in info:
-                    for tag in info.split(';'):
-                        if tag.startswith("AF="):
-                            try:
-                                af = float(tag.split('=')[1].split(',')[0])
-                            except Exception:
-                                af = 0.50
-                                
-                if chrom not in writers:
-                    out_path = os.path.join(data_dir, f"variants_{chrom}.tsv")
-                    writers[chrom] = open(out_path, 'w')
-                    writers[chrom].write("pos\tend_pos\tAF\n")
-                    
-                writers[chrom].write(f"{pos}\t{pos + var_len}\t{af:.4f}\n")
-    finally:
-        for w in writers.values():
-            w.close()
-    print("VCF partitioning completed successfully.")
+import subprocess
 
 def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     """
-    Parses variant coordinates and allele frequencies from the GIAB VCF file.
-    Uses partitioned chromosome-specific TSV files to achieve millisecond load speeds.
+    Queries variant coordinates and allele frequencies from the GIAB VCF file.
+    Uses a fast C-accelerated shell pipeline (gunzip | grep) to extract chromosome-specific
+    records in seconds, caching the result to TSV for dynamic lookups.
     """
     data_dir = os.path.dirname(vcf_path)
     chrom_tsv_path = os.path.join(data_dir, f"variants_{chr_id}.tsv")
     
-    # If the partition file is missing, perform the one-time split of the main VCF
+    # If the partitioned file does not exist, extract it using C-accelerated grep
     if not os.path.exists(chrom_tsv_path):
         if not os.path.exists(vcf_path):
             raise FileNotFoundError(
                 f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'. "
                 f"Real biological variant mapping requires this file. Please run ingest.py first."
             )
-        split_vcf_once(vcf_path, data_dir)
+            
+        print(f"C-Acceleration: Extracting Chromosome {chr_id} variants from VCF using grep...")
+        raw_vcf_temp = os.path.join(data_dir, f"temp_chr{chr_id}.vcf")
         
-    variants = []
+        try:
+            # Run fast decompression and chromosome-specific regex filtering in native C
+            cmd = f"gunzip -c {vcf_path} | grep -E '^chr{chr_id}\\s|^{chr_id}\\s' > {raw_vcf_temp}"
+            subprocess.run(cmd, shell=True, check=True)
+            
+            # Parse the tiny filtered file in Python
+            variants_all = []
+            if os.path.exists(raw_vcf_temp):
+                with open(raw_vcf_temp, 'r') as f:
+                    for line in f:
+                        parts = line.strip().split('\t')
+                        if len(parts) < 8:
+                            continue
+                        pos = int(parts[1])
+                        ref = parts[3]
+                        alt = parts[4]
+                        info = parts[7]
+                        var_len = max(len(ref), len(alt))
+                        
+                        af = 0.50
+                        if "AF=" in info:
+                            for tag in info.split(';'):
+                                if tag.startswith("AF="):
+                                    try:
+                                        af = float(tag.split('=')[1].split(',')[0])
+                                    except Exception:
+                                        af = 0.50
+                        variants_all.append((pos, pos + var_len, af))
+            
+            # Write to chromosome-specific TSV cache
+            with open(chrom_tsv_path, 'w') as out_f:
+                out_f.write("pos\tend_pos\tAF\n")
+                for pos, end, af in variants_all:
+                    out_f.write(f"{pos}\t{end}\t{af:.4f}\n")
+                    
+            print(f"SUCCESS: Chromosome {chr_id} variants partitioned and cached to {chrom_tsv_path}.")
+        except Exception as e:
+            raise RuntimeError(f"CRITICAL ERROR: C-accelerated VCF filtering failed: {e}")
+        finally:
+            if os.path.exists(raw_vcf_temp):
+                os.remove(raw_vcf_temp)
+                
     # Read the tiny chromosome partition file
+    variants = []
     with open(chrom_tsv_path, 'r') as f:
         header = f.readline() # Skip header
         for line in f:
@@ -78,7 +76,7 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
             end = int(parts[1])
             af = float(parts[2])
             
-            # Match overlapping coordinates
+            # Match overlapping coordinates within GFA window
             if max(min_pos, pos) < min(max_pos, end):
                 variants.append((pos, end, af))
                 
