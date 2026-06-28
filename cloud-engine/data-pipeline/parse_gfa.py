@@ -4,22 +4,23 @@ import gzip
 import random
 import glob
 import subprocess
+import sys
 
 def split_vcf_once(vcf_path, data_dir):
     """
     Splits the main whole-genome VCF file into chromosome-specific TSV files
     in a single pass using a fast, C-accelerated gunzip | awk piped command.
-    Filters variants to only keep those within the active pangenome window [900kb, 5Mb]
-    to prevent Python from looping over millions of out-of-bounds SNPs.
     """
-    print("One-time optimization: Partitioning whole-genome VCF in a single pass using C-accelerated awk...")
+    print(f"[VCF PARTITIONER] Starting single-pass partition sweep of VCF: {vcf_path}...", flush=True)
+    print(f"[VCF PARTITIONER] Writing outputs to directory: {data_dir}...", flush=True)
     
     # Clean up any old, bulky TSV files from previous attempts
     for f in glob.glob(os.path.join(data_dir, "variants_*.tsv")):
         try:
+            print(f"[VCF PARTITIONER] Removing older legacy cache file: {f}...", flush=True)
             os.remove(f)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[VCF PARTITIONER] Warning: Failed to remove {f}: {e}", flush=True)
             
     safe_data_dir = data_dir.replace('\\', '/')
     
@@ -37,44 +38,56 @@ def split_vcf_once(vcf_path, data_dir):
     )
     
     cmd = f"gunzip -c {vcf_path} | awk -F'\\t' '{awk_script}'"
+    print(f"[VCF PARTITIONER] Executing system pipeline:\n  {cmd}", flush=True)
+    
     try:
+        # Run C-piped decompression and partitioning
         subprocess.run(cmd, shell=True, check=True)
-        print("VCF partitioning completed successfully.")
+        print("[VCF PARTITIONER] SUCCESS: awk partitioning pipeline completed.", flush=True)
     except Exception as e:
+        print(f"[VCF PARTITIONER] CRITICAL HANG OR ERROR: awk execution failed: {e}", flush=True)
         raise RuntimeError(f"CRITICAL ERROR: awk-based VCF partitioning failed: {e}")
 
 def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     """
     Queries variant coordinates and allele frequencies from the GIAB VCF file.
-    Uses partitioned chromosome-specific TSV files to achieve millisecond load speeds.
-    Detects and deletes bulky legacy cache files to force optimized partitioning.
+    Uses partitioned chromosome-specific TSV files.
     """
     data_dir = os.path.dirname(vcf_path)
     chrom_tsv_path = os.path.join(data_dir, f"variants_{chr_id}.tsv")
     
-    # Auto-detect and remove legacy bulky caches (> 2 MB) from previous runs
+    print(f"[VCF LOADER] Target VCF: {vcf_path}", flush=True)
+    print(f"[VCF LOADER] Target TSV Cache: {chrom_tsv_path}", flush=True)
+    
+    # Auto-detect and remove legacy bulky caches (> 2 MB)
     if os.path.exists(chrom_tsv_path):
         file_size = os.path.getsize(chrom_tsv_path)
+        print(f"[VCF LOADER] Found existing TSV cache. File size: {file_size / 1024 / 1024:.2f} MB", flush=True)
         if file_size > 2 * 1024 * 1024:
-            print(f"Legacy bulky cache detected for Chromosome {chr_id} ({file_size / 1024 / 1024:.2f} MB). Removing to force optimized split...")
+            print(f"[VCF LOADER] Bulky legacy cache detected (>2MB). Deleting to force optimized rebuild...", flush=True)
             try:
                 os.remove(chrom_tsv_path)
-            except Exception:
-                pass
+                print(f"[VCF LOADER] Bulky cache deleted successfully.", flush=True)
+            except Exception as e:
+                print(f"[VCF LOADER] Warning: Could not delete bulky cache: {e}", flush=True)
                 
-    # If the chromosome partition TSV is missing, partition the whole-genome VCF in a single pass
+    # If partition TSV does not exist, trigger the single-pass partitioner
     if not os.path.exists(chrom_tsv_path):
+        print(f"[VCF LOADER] TSV Cache missing for Chromosome {chr_id}. Checking main VCF source...", flush=True)
         if not os.path.exists(vcf_path):
             raise FileNotFoundError(
-                f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'. "
-                f"Real biological variant mapping requires this file. Please run ingest.py first."
+                f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'."
             )
+        print(f"[VCF LOADER] Main VCF source verified. Triggering VCF partitioner...", flush=True)
         split_vcf_once(vcf_path, data_dir)
         
     variants = []
-    # Read the tiny chromosome partition file (now only contains coordinates in our target range)
+    print(f"[VCF LOADER] Loading coordinates from partition: {chrom_tsv_path}...", flush=True)
+    
+    lines_read = 0
     with open(chrom_tsv_path, 'r') as f:
         for line in f:
+            lines_read += 1
             parts = line.strip().split('\t')
             if len(parts) < 4:
                 continue
@@ -97,20 +110,19 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
                                     af = 0.50
                     variants.append((pos, pos + var_len, af))
             except ValueError:
-                # Ignore headers or malformed records
                 continue
                 
-    print(f"SUCCESS: Loaded {len(variants)} real VCF variants overlapping range [{min_pos}, {max_pos}] for Chromosome {chr_id}.")
+    print(f"[VCF LOADER] Read {lines_read} records. Found {len(variants)} variants in GFA range [{min_pos}, {max_pos}].", flush=True)
     return variants
 
 def parse_gfa(gfa_path):
     """
     Parses segment (S) and linkage (L) lines from a GFA format file,
     computes node coordinates from reference paths, and intersects them with real VCF variant loci.
-    Raises ValueError if reference paths are missing to prevent silent out-of-order coordinate calculations.
     """
     filename = os.path.basename(gfa_path)
     chr_id = filename.replace("chr", "").replace(".gfa", "")
+    print(f"\n[GFA PARSER] Starting parsing of: {gfa_path} (Chromosome: {chr_id})...", flush=True)
     
     raw_nodes = []
     edges_raw = []
@@ -154,6 +166,8 @@ def parse_gfa(gfa_path):
                             node_id = int(node_item.strip('+-'))
                             ref_path_nodes.append(node_id)
 
+    print(f"[GFA PARSER] Parsed {len(raw_nodes)} nodes, {len(edges_raw)} edges. Reference path steps count: {len(ref_path_nodes)}", flush=True)
+
     if not ref_path_nodes:
         raise ValueError(
             f"CRITICAL ERROR: No reference path (P or W lines) matching Chromosome {chr_id} "
@@ -193,10 +207,13 @@ def parse_gfa(gfa_path):
     vcf_path = os.path.abspath(os.path.join(os.path.dirname(gfa_path), "variants.vcf.gz"))
     min_pos = min(c[0] for c in node_coords.values()) if node_coords else 0
     max_pos = max(c[1] for c in node_coords.values()) if node_coords else 0
+    print(f"[GFA PARSER] Coordinates mapped. Range: [{min_pos}, {max_pos}]", flush=True)
+    
     real_variants = load_giab_variants(vcf_path, chr_id, min_pos, max_pos)
     
     # 4. Intersect GFA nodes with VCF variants to assign ground-truth labels
     nodes = []
+    variants_overlapped_count = 0
     for nid, seq in raw_nodes:
         node_start, node_end = node_coords.get(nid, (0, 0))
         
@@ -213,6 +230,7 @@ def parse_gfa(gfa_path):
         if overlap_variant is not None:
             node_type = "Structural Variant Slot"
             frequency = overlap_variant
+            variants_overlapped_count += 1
         elif len(seq) >= 50:
             node_type = "Reference"
             frequency = 1.0
@@ -248,7 +266,7 @@ def parse_gfa(gfa_path):
             "cohorts": edge_cohorts
         })
 
-    print(f"GFA parsing and coordinate-VCF intersection completed: {len(nodes)} nodes, {len(edges)} edges loaded.")
+    print(f"[GFA PARSER] Ingestion complete. Overlapping variants annotated: {variants_overlapped_count}/{len(nodes)} nodes.", flush=True)
     return nodes, edges
 
 def save_parsed_graph(nodes, edges, output_json_path):
