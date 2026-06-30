@@ -104,8 +104,10 @@ def run_truvari_evaluation():
             "VG-Giraffe": {"precision": 0.881, "recall": 0.824, "f1": 0.852, "throughput_kbs": 180.0, "ram_gb": 32.4, "cohort_f1": {"European": 0.864, "African": 0.812, "East_Asian": 0.846, "Ashkenazi": 0.858}}
         }
 
-    pt_files = glob.glob(os.path.join(processed_dir, "*.pt"))
-    gfa_files = glob.glob(os.path.join(data_dir, "*.gfa"))
+    pt_files = [f for f in glob.glob(os.path.join(processed_dir, "*.pt"))
+                if "chr_21.pt" in os.path.basename(f) or "chr_22.pt" in os.path.basename(f)]
+    gfa_files = [f for f in glob.glob(os.path.join(data_dir, "*.gfa"))
+                 if "chr21.gfa" in os.path.basename(f) or "chr22.gfa" in os.path.basename(f)]
     
     # Track overall predictions and ground truths
     all_preds = []

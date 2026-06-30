@@ -43,9 +43,10 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     if checkpoint_dir is None:
         checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
 
-    gfa_files = glob.glob(os.path.join(data_dir, "*.gfa"))
+    gfa_files = [f for f in glob.glob(os.path.join(data_dir, "*.gfa"))
+                 if "chr21.gfa" in os.path.basename(f) or "chr22.gfa" in os.path.basename(f)]
     if not gfa_files:
-        raise FileNotFoundError(f"No GFA graph files (*.gfa) found in {data_dir}. Please run data-pipeline/ingest.py first.")
+        raise FileNotFoundError(f"No chr21.gfa or chr22.gfa found in {data_dir}. Please run data-pipeline/ingest.py first.")
 
     print(f"Detected {len(gfa_files)} GFA files. Starting incremental PyG dataset parsing...")
 
