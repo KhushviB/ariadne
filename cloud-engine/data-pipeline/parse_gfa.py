@@ -35,12 +35,11 @@ def split_vcf_once(vcf_path, data_dir):
     safe_data_dir = data_dir.replace('\\', '/')
     
     # awk script to parse columns 2 (POS), 4 (REF), 5 (ALT), and 8 (INFO)
-    # and filter for pos >= 900,000 and pos <= 5,000,000 before redirecting
+    # and split them by chromosome autosome ID
     awk_script = (
         '!/^#/ {'
         '  chrom=$1; gsub(/^chr/, "", chrom);'
-        '  pos=int($2);'
-        '  if (chrom ~ /^[0-9]+$/ && chrom >= 1 && chrom <= 22 && pos >= 900000 && pos <= 5000000) {'
+        '  if (chrom ~ /^[0-9]+$/ && chrom >= 1 && chrom <= 22) {'
         '    out="' + safe_data_dir + '/variants_" chrom ".tsv";'
         '    print $2 "\t" $4 "\t" $5 "\t" $8 > out;'
         '  }'
@@ -69,12 +68,12 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     print(f"[VCF LOADER] Target VCF: {vcf_path}", flush=True)
     print(f"[VCF LOADER] Target TSV Cache: {chrom_tsv_path}", flush=True)
     
-    # Auto-detect and remove legacy bulky caches (> 2 MB)
+    # Auto-detect and remove legacy bulky caches (> 50 MB)
     if os.path.exists(chrom_tsv_path):
         file_size = os.path.getsize(chrom_tsv_path)
         print(f"[VCF LOADER] Found existing TSV cache. File size: {file_size / 1024 / 1024:.2f} MB", flush=True)
-        if file_size > 2 * 1024 * 1024:
-            print(f"[VCF LOADER] Bulky legacy cache detected (>2MB). Deleting to force optimized rebuild...", flush=True)
+        if file_size > 50 * 1024 * 1024:
+            print(f"[VCF LOADER] Bulky legacy cache detected (>50MB). Deleting to force optimized rebuild...", flush=True)
             try:
                 os.remove(chrom_tsv_path)
                 print(f"[VCF LOADER] Bulky cache deleted successfully.", flush=True)

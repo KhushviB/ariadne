@@ -6,7 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 import sys
 
-# Add data-pipeline folder to path
+# Add models and data-pipeline folders to path
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data-pipeline")))
 from pgat import PanGNNModel
 from dataset import PangenomeDataset
