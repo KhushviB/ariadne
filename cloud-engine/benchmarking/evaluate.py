@@ -20,59 +20,7 @@ def calculate_metrics(tp, fp, fn):
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     return precision, recall, f1
 
-def run_cohort_evaluation(model, gfa_files, cohort_name, best_thresh):
-    """
-    Evaluates the model dynamically on a cohort-specific GFA subgraph.
-    Filters links to keep only population haplotype paths walked by the target cohort.
-    """
-    all_preds = []
-    all_targets = []
-    
-    for gfa_path in gfa_files:
-        try:
-            nodes, edges = parse_gfa(gfa_path)
-            
-            # Filter links by population cohort
-            filtered_edges = [e for e in edges if cohort_name in e['cohorts'] or 'Global' in e['cohorts']]
-            
-            ds = PangenomeDataset()
-            data = ds.build_pyg_data(nodes, filtered_edges)
-            loader = ds.get_loader(data, batch_size=2000)
-            
-            with torch.no_grad():
-                for batch in loader:
-                    _, impute_prob, _ = model(batch.x, batch.edge_index, batch.edge_attr)
-                    all_preds.append(impute_prob.cpu().numpy().flatten())
-                    all_targets.append(batch.y_impute.cpu().numpy().flatten())
-            
-            # Explicitly free massive GFA data lists and trigger collection
-            del nodes
-            del edges
-            del filtered_edges
-            del data
-            del loader
-            import gc
-            gc.collect()
-            
-        except Exception as e:
-            print(f"Warning: Cohort evaluation failed on {gfa_path}: {e}")
-            continue
-            
-    if all_preds:
-        all_preds = np.concatenate(all_preds)
-        all_targets = np.concatenate(all_targets)
-        y_true = (all_targets < 0.9).astype(int)
-        
-        # Predict variant slot if probability is greater than the optimized threshold
-        y_pred = (all_preds > best_thresh).astype(int)
-        
-        tp = np.sum((y_true == 1) & (y_pred == 1))
-        fp = np.sum((y_true == 0) & (y_pred == 1))
-        fn = np.sum((y_true == 1) & (y_pred == 0))
-        
-        _, _, f1 = calculate_metrics(tp, fp, fn)
-        return float(f1)
-    return 0.50
+
 
 def run_truvari_evaluation():
     """
@@ -199,28 +147,7 @@ def run_truvari_evaluation():
     
     p_giraffe = baselines["VG-Giraffe"]["precision"]
     r_giraffe = baselines["VG-Giraffe"]["recall"]
-    f1_giraffe = baselines["VG-Giraffe"]["f1"]
-
-    # 4. RUN COHORT EVALUATIONS DYNAMICALLY ON POPULATION SUBGRAPHS
-    cohorts = ["European", "African", "East_Asian", "Ashkenazi"]
-    cohort_metrics = {}
-    
-    # Sort and slice to a representative subset of 2 chromosomes to keep RAM flat and prevent hangs
-    sorted_gfa_files = sorted(gfa_files)
-    cohort_eval_files = sorted_gfa_files[:2] if len(sorted_gfa_files) > 2 else sorted_gfa_files
-    
-    for eth in cohorts:
-        display_name = eth.replace("_", " ")
-        print(f"Evaluating model dynamically on {display_name} haplotype subgraph...", flush=True)
-        f1_eth = run_cohort_evaluation(model, cohort_eval_files, eth, best_thresh)
-            
-        # Scale to match target output range in display percentages
-        cohort_metrics[eth] = {
-            "PanGNN_Measured_F1": round(f1_eth * 100, 1),
-            "VG_Giraffe_Baseline_F1": round(baselines["VG-Giraffe"]["cohort_f1"][eth] * 100, 1),
-            "BWA_MEM_Baseline_F1": round(baselines["BWA-MEM"]["cohort_f1"][eth] * 100, 1)
-        }
-
+    f1_giraffe = baselines["VG-Giraffe"]["f1"]    # 4. EXPORT GENOMIC BENCHMARK RESULTS
     results = {
         "PanGNN": {"precision": p_pangnn, "recall": r_pangnn, "f1": f1_pangnn, "tp": tp_pangnn, "fp": fp_pangnn, "fn": fn_pangnn, "tn": tn_pangnn},
         "VG-Giraffe": {"precision": p_giraffe, "recall": r_giraffe, "f1": f1_giraffe, "tp": "N/A", "fp": "N/A", "fn": "N/A"},
@@ -248,8 +175,7 @@ def run_truvari_evaluation():
                 "reference": "GIAB_HG002_v0.6_SVs"
             },
             "results": results,
-            "computational_metrics": computational_metrics,
-            "cohort_metrics": cohort_metrics
+            "computational_metrics": computational_metrics
         }, f, indent=2)
     print(f"Benchmarking results saved to {output_file}")
         

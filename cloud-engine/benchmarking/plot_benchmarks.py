@@ -145,41 +145,8 @@ def generate_benchmark_plots():
     plt.close()
     print(f"Performance graph saved to: {plot2_path}")
 
-    # =========================================================================
-    # PLOT 3: COHORT BIAS / ROBUSTNESS COMPARISON (F1-SCORE BY ETHNICITY)
-    # =========================================================================
-    ethnicities = ['European', 'African', 'East_Asian', 'Ashkenazi']
-    labels = ['European', 'African', 'East Asian', 'Ashkenazi']
-    bwa_cohort = [cohorts_data[eth].get('BWA_MEM_Baseline_F1', cohorts_data[eth].get('BWA-MEM', 0.0)) for eth in ethnicities]
-    vg_cohort = [cohorts_data[eth].get('VG_Giraffe_Baseline_F1', cohorts_data[eth].get('VG-Giraffe', 0.0)) for eth in ethnicities]
-    pan_cohort = [cohorts_data[eth].get('PanGNN_Measured_F1', cohorts_data[eth].get('PanGNN', 0.0)) for eth in ethnicities]
-
-    x_cohort = np.arange(len(ethnicities))
-    width_c = 0.25
-
-    fig, ax = plt.subplots(figsize=(9.5, 5.5), dpi=300)
-    rects_c1 = ax.bar(x_cohort - width_c, bwa_cohort, width_c, label='BWA-MEM (Linear Align)', color='#ea580c', edgecolor='black', linewidth=0.6)
-    rects_c2 = ax.bar(x_cohort, vg_cohort, width_c, label='VG-Giraffe (Graph Align)', color='#059669', edgecolor='black', linewidth=0.6)
-    rects_c3 = ax.bar(x_cohort + width_c, pan_cohort, width_c, label='PanGNN (Our Model)', color='#7c3aed', edgecolor='black', linewidth=0.6)
-
-    ax.grid(color='#cbd5e1', linestyle='--', linewidth=0.8)
-    ax.set_ylabel('F1-Score (%)', fontsize=11, fontweight='bold', labelpad=10)
-    ax.set_title('Cross-Cohort Pathological Detection Robustness\n(Demonstrating Mitigation of Reference Haplotype Bias)', 
-                 fontsize=12, fontweight='bold', pad=15)
-    ax.set_xticks(x_cohort)
-    ax.set_xticklabels(labels, fontsize=10, fontweight='bold')
-    ax.set_ylim(0, 110)
-    ax.legend(frameon=True, facecolor='#ffffff', edgecolor='#e2e8f0', framealpha=0.95, fontsize=9.5, loc='upper left')
-
-    autolabel_pct(rects_c1)
-    autolabel_pct(rects_c2)
-    autolabel_pct(rects_c3)
-    
-    plt.tight_layout()
-    plot3_path = os.path.join(results_dir, "benchmark_cohort_robustness.png")
-    plt.savefig(plot3_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"Cohort robustness graph saved to: {plot3_path}")
+    # Note: Cohort robustness bar chart (Plot 3) has been removed because population
+    # cohorts are not modeled in this single-sample GIAB HG002 verification harness.
 
 if __name__ == '__main__':
     generate_benchmark_plots()

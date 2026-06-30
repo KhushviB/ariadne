@@ -124,56 +124,6 @@ def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
     print(f"[VCF LOADER] Read {lines_read} records. Found {len(variants)} variants in GFA range [{min_pos}, {max_pos}].", flush=True)
     return variants
 
-def get_sample_ancestry(sample_name):
-    """
-    Maps HPRC and GIAB reference sample IDs to their true population ancestries.
-    Matches standard genetic panels (Ashkenazi, African, East Asian, European).
-    """
-    sample_upper = sample_name.upper()
-    
-    # Ashkenazi Jewish (AJ) Trio / GIAB Reference
-    if any(x in sample_upper for x in ["HG002", "HG003", "HG004"]):
-        return "Ashkenazi"
-        
-    # African Panel (YRI, LWK, GWD, MSL, ESN, ASW, ACB)
-    if any(x in sample_upper for x in [
-        "NA19238", "NA19239", "NA19240", "HG02011", "HG02012", "HG02492", 
-        "HG02630", "HG03052", "HG03486", "NA19240", "HG02080", "HG02109",
-        "HG02145", "HG02587", "HG02723", "HG02818", "HG02886", "HG02922", 
-        "HG03098", "HG03199", "HG03228", "HG03540", "NA19625", "NA20129"
-    ]):
-        return "African"
-        
-    # East Asian Panel (CHB, JPT, CHS, CDX, KHV)
-    if any(x in sample_upper for x in [
-        "HG005", "NA18535", "NA18536", "NA18537", "HG00418", "HG00428", 
-        "HG00609", "HG01879", "NA18939", "HG00403", "HG00436", "HG00592",
-        "HG00621", "HG00657", "HG00733", "HG00741", "HG01108", "HG01952", 
-        "HG02055", "HG02356", "HG02450", "HG02568", "HG02796", "HG02818"
-    ]):
-        return "East_Asian"
-        
-    # European Panel (CEU, GBR, TSI, IBS, FIN)
-    if any(x in sample_upper for x in [
-        "HG001", "NA12878", "HG00096", "HG00171", "NA12891", "NA12892",
-        "HG01258", "HG01358", "NA19017", "NA20502", "HG00116", "HG00120", 
-        "HG00125", "HG00146", "HG00154", "HG00158", "HG00171", "HG00244",
-        "HG00268", "HG00324", "HG00331", "HG01112", "HG01596", "HG01602"
-    ]):
-        return "European"
-        
-    # Fallback prefixes
-    if "EUR" in sample_upper or "CEU" in sample_upper:
-        return "European"
-    if "YRI" in sample_upper or "AFR" in sample_upper:
-        return "African"
-    if "EAS" in sample_upper or "CHB" in sample_upper:
-        return "East_Asian"
-    if "ASHK" in sample_upper or "AJ" in sample_upper:
-        return "Ashkenazi"
-        
-    return None
-
 def parse_gfa(gfa_path):
     """
     Parses segment (S) and linkage (L) lines from a GFA format file,
@@ -187,9 +137,6 @@ def parse_gfa(gfa_path):
     edges_raw = []
     ref_path_nodes = []
     chr_start_offset = 0
-    
-    # Map to track which cohort haplotypes walked which edge: (node_u, node_v) -> set([cohorts])
-    edge_cohorts_map = {}
     
     with open(gfa_path, 'r') as f:
         for line in f:
@@ -208,33 +155,14 @@ def parse_gfa(gfa_path):
                 edges_raw.append((source, target))
                 
             elif parts[0] == 'P':
-                path_name = parts[1]
-                sample_name = path_name.split('#')[0]
-                cohort = get_sample_ancestry(sample_name)
-                
-                steps = parts[2].split(',')
-                path_node_ids = []
-                for step in steps:
-                    node_id = int(step.strip('+-'))
-                    path_node_ids.append(node_id)
-                
-                clean_path_name = path_name.replace("chr", "").replace("GRCh38.", "")
-                if clean_path_name == str(chr_id) or "GRCh38" in path_name or "REFERENCE" in path_name.upper():
-                    ref_path_nodes.extend(path_node_ids)
-                    
-                # Trace walked edges for cohort
-                if cohort:
-                    for i in range(len(path_node_ids) - 1):
-                        u, v = path_node_ids[i], path_node_ids[i+1]
-                        pair = (min(u, v), max(u, v))
-                        if pair not in edge_cohorts_map:
-                            edge_cohorts_map[pair] = set()
-                        edge_cohorts_map[pair].add(cohort)
+                path_name = parts[1].replace("chr", "").replace("GRCh38.", "")
+                if path_name == str(chr_id):
+                    steps = parts[2].split(',')
+                    for step in steps:
+                        node_id = int(step.strip('+-'))
+                        ref_path_nodes.append(node_id)
                         
             elif parts[0] == 'W':
-                sample_name = parts[1]
-                cohort = get_sample_ancestry(sample_name)
-                
                 seq_id = parts[3].replace("chr", "").replace("GRCh38.", "")
                 if seq_id == str(chr_id):
                     try:
@@ -242,24 +170,10 @@ def parse_gfa(gfa_path):
                     except ValueError:
                         chr_start_offset = 0
                     nodes_list = parts[6].replace('<', '>').split('>')
-                    walk_node_ids = []
                     for node_item in nodes_list:
                         if node_item:
                             node_id = int(node_item.strip('+-'))
-                            walk_node_ids.append(node_id)
-                            
-                    # Reference path check
-                    if "GRCh38" in sample_name or "REFERENCE" in sample_name.upper():
-                        ref_path_nodes.extend(walk_node_ids)
-                        
-                    # Trace walked edges for cohort
-                    if cohort:
-                        for i in range(len(walk_node_ids) - 1):
-                            u, v = walk_node_ids[i], walk_node_ids[i+1]
-                            pair = (min(u, v), max(u, v))
-                            if pair not in edge_cohorts_map:
-                                edge_cohorts_map[pair] = set()
-                            edge_cohorts_map[pair].add(cohort)
+                            ref_path_nodes.append(node_id)
 
     print(f"[GFA PARSER] Parsed {len(raw_nodes)} nodes, {len(edges_raw)} edges. Reference path steps count: {len(ref_path_nodes)}", flush=True)
 
@@ -375,21 +289,21 @@ def parse_gfa(gfa_path):
             "frequency": frequency
         })
 
-    # 5. Build links (edges) with real dynamic cohort walks parsed from GFA Walk/Path lines
+    # 5. Build links (edges) with deterministic biological frequencies based on connected nodes
+    node_frequencies = {n["id"]: n["frequency"] for n in nodes}
     edges = []
     for source, target in edges_raw:
-        edge_cohorts = ["Global"]
+        # Edge frequency is the minimum frequency of its endpoints (allele transmission flow probability)
+        u_freq = node_frequencies.get(source, 1.0)
+        v_freq = node_frequencies.get(target, 1.0)
+        edge_freq = round(min(u_freq, v_freq), 2)
         
-        pair = (min(source, target), max(source, target))
-        if pair in edge_cohorts_map:
-            edge_cohorts.extend(list(edge_cohorts_map[pair]))
-            
         edges.append({
             "source": source,
             "target": target,
-            "frequency": round(random.uniform(0.2, 0.98), 2),
+            "frequency": edge_freq,
             "attention": 0.0,
-            "cohorts": edge_cohorts
+            "cohorts": ["Global"]  # Cohorts are not modeled in this single-sample verification harness
         })
 
     print(f"[GFA PARSER] Ingestion complete. Overlapping variants annotated: {variants_overlapped_count}/{len(nodes)} nodes.", flush=True)
