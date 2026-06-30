@@ -62,7 +62,9 @@ def run_cohort_evaluation(model, gfa_files, cohort_name, best_thresh):
         all_preds = np.concatenate(all_preds)
         all_targets = np.concatenate(all_targets)
         y_true = (all_targets < 0.9).astype(int)
-        y_pred = (all_preds < best_thresh).astype(int)
+        
+        # Predict variant slot if probability is greater than the optimized threshold
+        y_pred = (all_preds > best_thresh).astype(int)
         
         tp = np.sum((y_true == 1) & (y_pred == 1))
         fp = np.sum((y_true == 0) & (y_pred == 1))
@@ -164,7 +166,7 @@ def run_truvari_evaluation():
     if p_max > p_min:
         threshold_candidates = np.linspace(p_min, p_max, 100)
         for thresh in threshold_candidates:
-            y_pred = (all_preds < thresh).astype(int)
+            y_pred = (all_preds > thresh).astype(int)
             
             tp_local = np.sum((y_true == 1) & (y_pred == 1))
             fp_local = np.sum((y_true == 0) & (y_pred == 1))

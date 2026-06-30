@@ -128,8 +128,21 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                     # Pass node token matrix directly. Pooling is done inside the model.
                     h, impute_prob, pheno_risk = model(batch.x, batch.edge_index, batch.edge_attr)
                     
-                    # Match sizes with targets
-                    loss_impute = criterion_impute(impute_prob, batch.y_impute)
+                    # Map frequency targets to binary classification targets
+                    # (1.0 for variant slots where frequency < 0.9, 0.0 for reference nodes)
+                    is_pos = (batch.y_impute < 0.9).float()
+                    
+                    # Compute dynamic class weights to balance the BCE loss
+                    num_pos = is_pos.sum().item()
+                    num_neg = (1.0 - is_pos).sum().item()
+                    eps = 1e-7
+                    
+                    if num_pos > 0:
+                        weight_pos = num_neg / num_pos
+                        loss_impute = - (weight_pos * is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
+                    else:
+                        loss_impute = - (is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
+                        
                     loss_pheno = criterion_pheno(pheno_risk, batch.y_pheno)
                     
                     loss = loss_impute + 0.4 * loss_pheno
