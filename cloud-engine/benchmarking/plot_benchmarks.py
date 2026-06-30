@@ -150,9 +150,9 @@ def generate_benchmark_plots():
     # =========================================================================
     ethnicities = ['European', 'African', 'East_Asian', 'Ashkenazi']
     labels = ['European', 'African', 'East Asian', 'Ashkenazi']
-    bwa_cohort = [cohorts_data[eth]['BWA-MEM'] for eth in ethnicities]
-    vg_cohort = [cohorts_data[eth]['VG-Giraffe'] for eth in ethnicities]
-    pan_cohort = [cohorts_data[eth]['PanGNN'] for eth in ethnicities]
+    bwa_cohort = [cohorts_data[eth].get('BWA_MEM_Baseline_F1', cohorts_data[eth].get('BWA-MEM', 0.0)) for eth in ethnicities]
+    vg_cohort = [cohorts_data[eth].get('VG_Giraffe_Baseline_F1', cohorts_data[eth].get('VG-Giraffe', 0.0)) for eth in ethnicities]
+    pan_cohort = [cohorts_data[eth].get('PanGNN_Measured_F1', cohorts_data[eth].get('PanGNN', 0.0)) for eth in ethnicities]
 
     x_cohort = np.arange(len(ethnicities))
     width_c = 0.25

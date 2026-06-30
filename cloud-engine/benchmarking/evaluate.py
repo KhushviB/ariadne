@@ -183,17 +183,13 @@ def run_truvari_evaluation():
                 
     print(f"Optimal Classification Threshold Found: {best_thresh:.4f} (Local F1: {best_f1:.4f})")
 
-    # Scale local predictions up to the target autosomal genome scale (2,200,000 total nodes)
-    n_target = 2200000
-    n_local = len(y_true)
-    scale_factor = n_target / n_local
-    
-    tp_pangnn = int(round(best_tp * scale_factor))
-    fp_pangnn = int(round(best_fp * scale_factor))
-    fn_pangnn = int(round(best_fn * scale_factor))
-    tn_pangnn = n_target - (tp_pangnn + fp_pangnn + fn_pangnn)
+    # Report actual raw counts measured dynamically across the evaluated dataset
+    tp_pangnn = int(best_tp)
+    fp_pangnn = int(best_fp)
+    fn_pangnn = int(best_fn)
+    tn_pangnn = int(best_tn)
 
-    # Compute final un-overridden metrics from actual scaled variables
+    # Compute final un-overridden metrics from actual raw variables
     p_pangnn, r_pangnn, f1_pangnn = calculate_metrics(tp_pangnn, fp_pangnn, fn_pangnn)
 
     # 3. Load literature comparative baselines directly as published reference standards
@@ -220,9 +216,9 @@ def run_truvari_evaluation():
             
         # Scale to match target output range in display percentages
         cohort_metrics[eth] = {
-            "PanGNN": round(f1_eth * 100, 1),
-            "VG-Giraffe": round(baselines["VG-Giraffe"]["cohort_f1"][eth] * 100, 1),
-            "BWA-MEM": round(baselines["BWA-MEM"]["cohort_f1"][eth] * 100, 1)
+            "PanGNN_Measured_F1": round(f1_eth * 100, 1),
+            "VG_Giraffe_Baseline_F1": round(baselines["VG-Giraffe"]["cohort_f1"][eth] * 100, 1),
+            "BWA_MEM_Baseline_F1": round(baselines["BWA-MEM"]["cohort_f1"][eth] * 100, 1)
         }
 
     results = {
