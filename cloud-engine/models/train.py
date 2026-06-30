@@ -88,14 +88,29 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
 
     print(f"Successfully processed {len(pyg_paths)} chromosomes. Setting up training parameters...")
 
+    # Calculate global label distribution for stable class-weighting
+    print("Calculating global label distribution for stable class-weighting...", flush=True)
+    global_pos = 0.0
+    global_neg = 0.0
+    for pt_path in pyg_paths:
+        try:
+            data = torch.load(pt_path, map_location="cpu")
+            is_pos = (data.y_impute < 0.9).float()
+            global_pos += is_pos.sum().item()
+            global_neg += (1.0 - is_pos).sum().item()
+        except Exception:
+            pass
+            
+    global_pos_weight = 1.0
+    if global_pos > 0:
+        global_pos_weight = global_neg / global_pos
+    print(f"Global distribution: Positives={int(global_pos)}, Negatives={int(global_neg)}, Ratio={global_pos_weight:.2f}:1", flush=True)
+
     # 2. Model setup
-    # x input features size: max_len=10 sequence tokens, vocab size=6
-    # embed_dim=16, hidden_dim=32, edge_dim=1 (frequency)
     model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Loss functions
-    criterion_impute = nn.BCELoss() # Binary Cross Entropy for variant presence probability
     criterion_pheno = nn.MSELoss()  # Mean Squared Error for phenotypic risk score
 
     start_epoch = 0
@@ -105,17 +120,22 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     if os.path.exists(checkpoint_path):
         start_epoch, _ = load_checkpoint(checkpoint_path, model, optimizer)
 
-    print("Beginning GNN training loops...")
+    print("Beginning GNN training loops...", flush=True)
     model.train()
     
     for epoch in range(start_epoch, epochs):
         total_loss = 0.0
         num_batches = 0
         
+        pos_pred_sum = 0.0
+        pos_pred_count = 0
+        neg_pred_sum = 0.0
+        neg_pred_count = 0
+        
         # Loop through each chromosome's saved PyG tensor graph
         for pt_path in pyg_paths:
             chr_name = os.path.basename(pt_path).replace(".pt", "")
-            print(f"Epoch {epoch+1}/{epochs} | Loading {chr_name} for training batch...")
+            print(f"Epoch {epoch+1}/{epochs} | Loading {chr_name} for training batch...", flush=True)
             
             try:
                 chr_data = torch.load(pt_path)
@@ -128,20 +148,21 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                     # Pass node token matrix directly. Pooling is done inside the model.
                     h, impute_prob, pheno_risk = model(batch.x, batch.edge_index, batch.edge_attr)
                     
-                    # Map frequency targets to binary classification targets
-                    # (1.0 for variant slots where frequency < 0.9, 0.0 for reference nodes)
                     is_pos = (batch.y_impute < 0.9).float()
                     
-                    # Compute dynamic class weights to balance the BCE loss
-                    num_pos = is_pos.sum().item()
-                    num_neg = (1.0 - is_pos).sum().item()
-                    eps = 1e-7
+                    # Accumulate prediction statistics for real-time telemetry
+                    with torch.no_grad():
+                        pos_mask = (is_pos == 1.0).squeeze(-1)
+                        neg_mask = (is_pos == 0.0).squeeze(-1)
+                        
+                        pos_pred_sum += impute_prob.squeeze(-1)[pos_mask].sum().item()
+                        pos_pred_count += pos_mask.sum().item()
+                        neg_pred_sum += impute_prob.squeeze(-1)[neg_mask].sum().item()
+                        neg_pred_count += neg_mask.sum().item()
                     
-                    if num_pos > 0:
-                        weight_pos = num_neg / num_pos
-                        loss_impute = - (weight_pos * is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
-                    else:
-                        loss_impute = - (is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
+                    eps = 1e-7
+                    # Use the stable global pos_weight constant
+                    loss_impute = - (global_pos_weight * is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
                         
                     loss_pheno = criterion_pheno(pheno_risk, batch.y_pheno)
                     
@@ -158,11 +179,15 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                 gc.collect()
                 
             except Exception as e:
-                print(f"Error training batch for {chr_name}: {e}. Skipping batch.")
+                print(f"Error training batch for {chr_name}: {e}. Skipping batch.", flush=True)
                 continue
         
         avg_loss = total_loss / max(1, num_batches)
-        print(f"Epoch {epoch+1}/{epochs} | Average Loss: {avg_loss:.4f}")
+        avg_pos_pred = pos_pred_sum / max(1, pos_pred_count)
+        avg_neg_pred = neg_pred_sum / max(1, neg_pred_count)
+        
+        print(f"Epoch {epoch+1}/{epochs} | Average Loss: {avg_loss:.4f} | "
+              f"Avg Pos Pred (SV): {avg_pos_pred:.4f} | Avg Neg Pred (Ref): {avg_neg_pred:.4f}", flush=True)
         
         # Save checkpoint after every epoch
         save_checkpoint({
@@ -172,7 +197,7 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
             'loss': avg_loss,
         }, checkpoint_dir)
 
-    print("GNN Training sequence completed successfully.")
+    print("GNN Training sequence completed successfully.", flush=True)
     
     # Save final model weights
     torch.save(model.state_dict(), os.path.join(checkpoint_dir, "pangnn_final.pth"))
