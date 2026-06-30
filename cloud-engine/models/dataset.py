@@ -66,7 +66,7 @@ class PangenomeDataset:
         )
         return data
 
-    def get_loader(self, data: Data, batch_size: int = 2000) -> list:
+    def get_loader(self, data: Data, batch_size: int = 2000, max_subgraphs: int = None) -> list:
         """
         Splits the single large graph into multiple connected subgraphs.
         Partitions nodes consecutively (representing chromosomal corridors)
@@ -77,7 +77,9 @@ class PangenomeDataset:
         
         # Sequentially scan blocks of nodes
         i = 0
-        while i < num_nodes and len(subgraphs) < 5:
+        while i < num_nodes:
+            if max_subgraphs is not None and len(subgraphs) >= max_subgraphs:
+                break
             batch_nodes = torch.arange(i, min(i + batch_size, num_nodes))
             sub_data = data.subgraph(batch_nodes)
             

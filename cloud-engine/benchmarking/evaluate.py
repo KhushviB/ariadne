@@ -196,19 +196,14 @@ def run_truvari_evaluation():
     # Compute final un-overridden metrics from actual scaled variables
     p_pangnn, r_pangnn, f1_pangnn = calculate_metrics(tp_pangnn, fp_pangnn, fn_pangnn)
 
-    # Total variants target size in the benchmark set
-    v_positive = tp_pangnn + fn_pangnn
+    # 3. Load literature comparative baselines directly as published reference standards
+    p_bwa = baselines["BWA-MEM"]["precision"]
+    r_bwa = baselines["BWA-MEM"]["recall"]
+    f1_bwa = baselines["BWA-MEM"]["f1"]
     
-    # 3. Align baseline comparative metrics based on the target variant scale
-    tp_bwa = int(round(v_positive * baselines["BWA-MEM"]["recall"]))
-    fn_bwa = v_positive - tp_bwa
-    fp_bwa = int(round(tp_bwa * (1 - baselines["BWA-MEM"]["precision"]) / baselines["BWA-MEM"]["precision"]))
-    p_bwa, r_bwa, f1_bwa = calculate_metrics(tp_bwa, fp_bwa, fn_bwa)
-    
-    tp_giraffe = int(round(v_positive * baselines["VG-Giraffe"]["recall"]))
-    fn_giraffe = v_positive - tp_giraffe
-    fp_giraffe = int(round(tp_giraffe * (1 - baselines["VG-Giraffe"]["precision"]) / baselines["VG-Giraffe"]["precision"]))
-    p_giraffe, r_giraffe, f1_giraffe = calculate_metrics(tp_giraffe, fp_giraffe, fn_giraffe)
+    p_giraffe = baselines["VG-Giraffe"]["precision"]
+    r_giraffe = baselines["VG-Giraffe"]["recall"]
+    f1_giraffe = baselines["VG-Giraffe"]["f1"]
 
     # 4. RUN COHORT EVALUATIONS DYNAMICALLY ON POPULATION SUBGRAPHS
     cohorts = ["European", "African", "East_Asian", "Ashkenazi"]
@@ -232,13 +227,14 @@ def run_truvari_evaluation():
 
     results = {
         "PanGNN": {"precision": p_pangnn, "recall": r_pangnn, "f1": f1_pangnn, "tp": tp_pangnn, "fp": fp_pangnn, "fn": fn_pangnn, "tn": tn_pangnn},
-        "VG-Giraffe": {"precision": p_giraffe, "recall": r_giraffe, "f1": f1_giraffe, "tp": tp_giraffe, "fp": fp_giraffe, "fn": fn_giraffe},
-        "BWA-MEM": {"precision": p_bwa, "recall": r_bwa, "f1": f1_bwa, "tp": tp_bwa, "fp": fp_bwa, "fn": fn_bwa}
+        "VG-Giraffe": {"precision": p_giraffe, "recall": r_giraffe, "f1": f1_giraffe, "tp": "N/A", "fp": "N/A", "fn": "N/A"},
+        "BWA-MEM": {"precision": p_bwa, "recall": r_bwa, "f1": f1_bwa, "tp": "N/A", "fp": "N/A", "fn": "N/A"}
     }
 
     print("\nBenchmark Readouts:")
-    for name, data in results.items():
-        print(f"| [{name:<10}]  Precision: {data['precision']*100:.1f}%  |  Recall: {data['recall']*100:.1f}%  |  F1-Score: {data['f1']*100:.1f}%   |")
+    print(f"| [{'PanGNN':<12}] (Measured)  Precision: {p_pangnn*100:.1f}%  |  Recall: {r_pangnn*100:.1f}%  |  F1-Score: {f1_pangnn*100:.1f}%   |")
+    print(f"| [{'VG-Giraffe':<12}] (Baseline)  Precision: {p_giraffe*100:.1f}%  |  Recall: {r_giraffe*100:.1f}%  |  F1-Score: {f1_giraffe*100:.1f}%   |")
+    print(f"| [{'BWA-MEM':<12}] (Baseline)  Precision: {p_bwa*100:.1f}%  |  Recall: {r_bwa*100:.1f}%  |  F1-Score: {f1_bwa*100:.1f}%   |")
     print("+-----------------------------------------------------------------------+")
     
     computational_metrics = {
