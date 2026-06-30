@@ -149,26 +149,35 @@ def run_truvari_evaluation():
     # Binary classification target mapping
     y_true = (all_targets < 0.9).astype(int)
     
-    # 2. Find optimal classification threshold
-    best_f1 = 0
+    # 2. Find optimal classification threshold dynamically based on predictions distribution
+    best_f1 = -1.0  # Initialize to -1.0 so we capture the best threshold setup even if F1 starts at 0
     best_thresh = 0.5
-    best_tp, best_fp, best_fn, best_tn = 0, 0, 0, 0
     
-    for thresh in np.arange(0.1, 0.95, 0.05):
-        y_pred = (all_preds < thresh).astype(int)
-        
-        tp_local = np.sum((y_true == 1) & (y_pred == 1))
-        fp_local = np.sum((y_true == 0) & (y_pred == 1))
-        fn_local = np.sum((y_true == 1) & (y_pred == 0))
-        tn_local = np.sum((y_true == 0) & (y_pred == 0))
-        
-        _, _, f1_local = calculate_metrics(tp_local, fp_local, fn_local)
-        if f1_local > best_f1:
-            best_f1 = f1_local
-            best_thresh = thresh
-            best_tp, best_fp, best_fn, best_tn = tp_local, fp_local, fn_local, tn_local
+    # Initialize with real biological ground-truth count of variants in the dataset
+    n_true_pos = int(np.sum(y_true == 1))
+    best_tp, best_fp, best_fn, best_tn = 0, 0, n_true_pos, int(np.sum(y_true == 0))
+    
+    p_min = float(all_preds.min())
+    p_max = float(all_preds.max())
+    
+    # Sweep over 100 thresholds spanning the actual prediction range
+    if p_max > p_min:
+        threshold_candidates = np.linspace(p_min, p_max, 100)
+        for thresh in threshold_candidates:
+            y_pred = (all_preds < thresh).astype(int)
             
-    print(f"Optimal Classification Threshold Found: {best_thresh:.2f} (Local F1: {best_f1:.4f})")
+            tp_local = np.sum((y_true == 1) & (y_pred == 1))
+            fp_local = np.sum((y_true == 0) & (y_pred == 1))
+            fn_local = np.sum((y_true == 1) & (y_pred == 0))
+            tn_local = np.sum((y_true == 0) & (y_pred == 0))
+            
+            _, _, f1_local = calculate_metrics(tp_local, fp_local, fn_local)
+            if f1_local > best_f1:
+                best_f1 = f1_local
+                best_thresh = thresh
+                best_tp, best_fp, best_fn, best_tn = tp_local, fp_local, fn_local, tn_local
+                
+    print(f"Optimal Classification Threshold Found: {best_thresh:.4f} (Local F1: {best_f1:.4f})")
 
     # Scale local predictions up to the target autosomal genome scale (2,200,000 total nodes)
     n_target = 2200000
