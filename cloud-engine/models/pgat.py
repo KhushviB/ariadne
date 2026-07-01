@@ -96,8 +96,11 @@ class PanGNNModel(nn.Module):
         # Nucleotide token embedding layer
         self.token_embed = nn.Embedding(num_vocab, embed_dim)
         
-        # +2 for log-degree and is_variant topological features concatenated before first conv
-        self.conv1 = PGATConv(embed_dim + 2, hidden_dim, edge_dim, heads=heads)
+        # Topological feature projection (projects log-degree and log-length)
+        self.topo_proj = nn.Linear(2, embed_dim)
+        
+        # conv1 takes concatenated sequence and topological projected embeddings
+        self.conv1 = PGATConv(embed_dim * 2, hidden_dim, edge_dim, heads=heads)
         self.conv2 = PGATConv(hidden_dim, hidden_dim, edge_dim, heads=heads)
         
         # Predictor heads
@@ -111,21 +114,18 @@ class PanGNNModel(nn.Module):
         node_len: Log-scaled node sequence length [num_nodes, 1] — physical length signal
         """
         # Convert tokens to continuous embeddings, pool over sequence length
-        x = self.token_embed(x_tokens).mean(dim=1)  # [num_nodes, embed_dim]
+        x_seq = self.token_embed(x_tokens).mean(dim=1)  # [num_nodes, embed_dim]
 
-        # Concatenate degree and sequence length topological/physical signals
-        features = [x]
-        if node_degree is not None:
-            features.append(node_degree)
-        else:
-            features.append(torch.zeros(x.size(0), 1, device=x.device))
-            
-        if node_len is not None:
-            features.append(node_len)
-        else:
-            features.append(torch.zeros(x.size(0), 1, device=x.device))
-            
-        x = torch.cat(features, dim=-1) # [num_nodes, embed_dim + 2]
+        # Stack topological signals
+        deg = node_degree if node_degree is not None else torch.zeros(x_seq.size(0), 1, device=x_seq.device)
+        length = node_len if node_len is not None else torch.zeros(x_seq.size(0), 1, device=x_seq.device)
+        topo = torch.cat([deg, length], dim=-1) # [num_nodes, 2]
+        
+        # Project topo features to match sequence embedding scale
+        x_topo = self.topo_proj(topo) # [num_nodes, embed_dim]
+        
+        # Concatenate sequence and topological embeddings
+        x = torch.cat([x_seq, x_topo], dim=-1) # [num_nodes, embed_dim * 2]
 
         # Pass through custom P-GAT layers
         h = self.conv1(x, edge_index, edge_attr)
