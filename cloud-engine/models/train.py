@@ -169,7 +169,7 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                     h, impute_prob, pheno_risk = model(
                         batch.x, batch.edge_index, batch.edge_attr,
                         node_degree=batch.node_degree if hasattr(batch, 'node_degree') else None,
-                        is_variant=batch.is_variant if hasattr(batch, 'is_variant') else None
+                        node_len=batch.node_len if hasattr(batch, 'node_len') else None
                     )
 
                     # Sequential slicing: ALL nodes in batch are seed nodes.

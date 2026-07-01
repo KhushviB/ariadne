@@ -32,15 +32,16 @@ class PangenomeDataset:
 
         x_list = []
         node_freq = []
-        is_var_list = []
+        node_len_list = []
         for node in nodes:
             tokens = self.tokenize_sequence(node['sequence'], max_len=10)
             x_list.append(tokens)
             node_freq.append(node.get('frequency', 1.0))
-            is_var_list.append([1.0 if node.get('type') == "Structural Variant Slot" else 0.0])
+            # Log-scaled sequence length: a physical signal, not a target label
+            node_len_list.append([np.log1p(len(node.get('sequence', '')))])
             
         x_tokens = torch.tensor(x_list, dtype=torch.long) # [num_nodes, max_len]
-        is_variant = torch.tensor(is_var_list, dtype=torch.float) # [num_nodes, 1]
+        node_len = torch.tensor(node_len_list, dtype=torch.float) # [num_nodes, 1]
         
         edge_sources = []
         edge_targets = []
@@ -77,7 +78,7 @@ class PangenomeDataset:
             y_impute=y_impute,
             y_pheno=y_pheno,
             node_degree=node_degree,
-            is_variant=is_variant,
+            node_len=node_len,
         )
         return data
 
@@ -108,11 +109,11 @@ class PangenomeDataset:
             batch_nodes = torch.arange(start, end)
             sub = data.subgraph(batch_nodes)
 
-            # Explicitly carry node_degree and is_variant (custom attrs — subgraph() may skip them)
+            # Explicitly carry node_degree and node_len (custom attrs — subgraph() may skip them)
             if hasattr(data, 'node_degree') and data.node_degree is not None:
                 sub.node_degree = data.node_degree[batch_nodes]
-            if hasattr(data, 'is_variant') and data.is_variant is not None:
-                sub.is_variant = data.is_variant[batch_nodes]
+            if hasattr(data, 'node_len') and data.node_len is not None:
+                sub.node_len = data.node_len[batch_nodes]
 
             if sub.edge_index.numel() > 0:
                 subgraphs.append(sub)
@@ -123,8 +124,8 @@ class PangenomeDataset:
             sub = data.subgraph(batch_nodes)
             if hasattr(data, 'node_degree') and data.node_degree is not None:
                 sub.node_degree = data.node_degree[batch_nodes]
-            if hasattr(data, 'is_variant') and data.is_variant is not None:
-                sub.is_variant = data.is_variant[batch_nodes]
+            if hasattr(data, 'node_len') and data.node_len is not None:
+                sub.node_len = data.node_len[batch_nodes]
             if sub.edge_index.numel() > 0:
                 subgraphs.append(sub)
 
@@ -133,8 +134,8 @@ class PangenomeDataset:
             fallback = data.subgraph(fallback_nodes)
             if hasattr(data, 'node_degree') and data.node_degree is not None:
                 fallback.node_degree = data.node_degree[fallback_nodes]
-            if hasattr(data, 'is_variant') and data.is_variant is not None:
-                fallback.is_variant = data.is_variant[fallback_nodes]
+            if hasattr(data, 'node_len') and data.node_len is not None:
+                fallback.node_len = data.node_len[fallback_nodes]
             subgraphs.append(fallback)
 
         return subgraphs

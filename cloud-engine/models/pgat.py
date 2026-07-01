@@ -104,24 +104,24 @@ class PanGNNModel(nn.Module):
         self.impute_head = nn.Linear(hidden_dim, 1)
         self.phenotype_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x_tokens, edge_index, edge_attr, node_degree=None, is_variant=None):
+    def forward(self, x_tokens, edge_index, edge_attr, node_degree=None, node_len=None):
         """
         x_tokens: Integer indices of nucleotide sequence tokens [num_nodes, max_len]
         node_degree: Log-scaled node degree [num_nodes, 1] — topological signal
-        is_variant: Variant slot indicator [num_nodes, 1] — topological indicator
+        node_len: Log-scaled node sequence length [num_nodes, 1] — physical length signal
         """
         # Convert tokens to continuous embeddings, pool over sequence length
         x = self.token_embed(x_tokens).mean(dim=1)  # [num_nodes, embed_dim]
 
-        # Concatenate degree and variant topological signals
+        # Concatenate degree and sequence length topological/physical signals
         features = [x]
         if node_degree is not None:
             features.append(node_degree)
         else:
             features.append(torch.zeros(x.size(0), 1, device=x.device))
             
-        if is_variant is not None:
-            features.append(is_variant)
+        if node_len is not None:
+            features.append(node_len)
         else:
             features.append(torch.zeros(x.size(0), 1, device=x.device))
             

@@ -289,14 +289,13 @@ def parse_gfa(gfa_path):
             "frequency": frequency
         })
 
-    # 5. Build links (edges) with deterministic biological frequencies based on connected nodes
-    node_frequencies = {n["id"]: n["frequency"] for n in nodes}
+    # 5. Build links (edges) with static topological priors (1.0 for reference, 0.5 for variant bubbles)
+    node_types = {n["id"]: n["type"] for n in nodes}
     edges = []
     for source, target in edges_raw:
-        # Edge frequency is the minimum frequency of its endpoints (allele transmission flow probability)
-        u_freq = node_frequencies.get(source, 1.0)
-        v_freq = node_frequencies.get(target, 1.0)
-        edge_freq = round(min(u_freq, v_freq), 2)
+        is_ref_u = node_types.get(source, "Reference") == "Reference"
+        is_ref_v = node_types.get(target, "Reference") == "Reference"
+        edge_freq = 1.0 if (is_ref_u and is_ref_v) else 0.5
         
         edges.append({
             "source": source,

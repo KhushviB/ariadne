@@ -87,7 +87,7 @@ def run_truvari_evaluation():
                         _, impute_prob, _ = model(
                             batch.x, batch.edge_index, batch.edge_attr,
                             node_degree=batch.node_degree if hasattr(batch, 'node_degree') else None,
-                            is_variant=batch.is_variant if hasattr(batch, 'is_variant') else None
+                            node_len=batch.node_len if hasattr(batch, 'node_len') else None
                         )
                         # All nodes in sequential subgraph are seed nodes
                         all_preds.append(impute_prob.cpu().numpy().flatten())
