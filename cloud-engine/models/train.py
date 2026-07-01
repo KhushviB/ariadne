@@ -127,11 +127,11 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}" + (f" ({torch.cuda.get_device_name(0)})" if device.type == "cuda" else ""), flush=True)
 
-    model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2).to(device)
+    model = PanGNNModel(num_vocab=6, embed_dim=64, hidden_dim=128, edge_dim=1, heads=4).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Loss functions
-    criterion_pheno = nn.MSELoss()  # Mean Squared Error for phenotypic risk score
+    # Loss: focal loss handles 31:1 class imbalance without predict-all-positive collapse
 
     start_epoch = 0
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pt")
@@ -165,29 +165,27 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                 for batch in loader:
                     batch = batch.to(device)
                     optimizer.zero_grad()
-                    
-                    # Pass node token matrix directly. Pooling is done inside the model.
-                    h, impute_prob, pheno_risk = model(batch.x, batch.edge_index, batch.edge_attr)
-                    
+
+                    h, impute_prob, pheno_risk = model(
+                        batch.x, batch.edge_index, batch.edge_attr,
+                        node_degree=batch.node_degree if hasattr(batch, 'node_degree') else None,
+                        is_variant=batch.is_variant if hasattr(batch, 'is_variant') else None
+                    )
+
+                    # Sequential slicing: ALL nodes in batch are seed nodes.
+                    # No context dilution — compute loss over the full batch.
                     is_pos = (batch.y_impute < 0.9).float()
-                    
-                    # Accumulate prediction statistics for real-time telemetry
+
                     with torch.no_grad():
+                        prob = impute_prob.squeeze(-1)
                         pos_mask = (is_pos == 1.0).squeeze(-1)
                         neg_mask = (is_pos == 0.0).squeeze(-1)
-                        
-                        pos_pred_sum += impute_prob.squeeze(-1)[pos_mask].sum().item()
+                        pos_pred_sum += prob[pos_mask].sum().item()
                         pos_pred_count += pos_mask.sum().item()
-                        neg_pred_sum += impute_prob.squeeze(-1)[neg_mask].sum().item()
+                        neg_pred_sum += prob[neg_mask].sum().item()
                         neg_pred_count += neg_mask.sum().item()
-                    
-                    # Focal loss: handles 31:1 imbalance without collapsing
-                    # to predict-everything-positive local minimum
-                    loss_impute = focal_loss(impute_prob, is_pos, global_pos_weight)
-                        
-                    loss_pheno = criterion_pheno(pheno_risk, batch.y_pheno)
-                    
-                    loss = loss_impute + 0.4 * loss_pheno
+
+                    loss = focal_loss(impute_prob, is_pos, global_pos_weight)
                     loss.backward()
                     optimizer.step()
                     

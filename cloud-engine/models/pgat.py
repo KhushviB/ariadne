@@ -88,29 +88,45 @@ class PanGNNModel(nn.Module):
     """
     Consolidated PanGNN model mapping allele node sequences to embeddings 
     and predicting variant imputation probability and phenotypic risk scores.
+    conv1 takes embed_dim + 1 because node degree (1 scalar, log-scaled) is
+    concatenated to the sequence embedding before the first GAT layer.
     """
     def __init__(self, num_vocab: int, embed_dim: int, hidden_dim: int, edge_dim: int, heads: int = 2):
         super(PanGNNModel, self).__init__()
         # Nucleotide token embedding layer
         self.token_embed = nn.Embedding(num_vocab, embed_dim)
         
-        self.conv1 = PGATConv(embed_dim, hidden_dim, edge_dim, heads=heads)
+        # +2 for log-degree and is_variant topological features concatenated before first conv
+        self.conv1 = PGATConv(embed_dim + 2, hidden_dim, edge_dim, heads=heads)
         self.conv2 = PGATConv(hidden_dim, hidden_dim, edge_dim, heads=heads)
         
         # Predictor heads
-        self.impute_head = nn.Linear(hidden_dim, 1) # Imputation probability
-        self.phenotype_head = nn.Linear(hidden_dim, 1) # Phenotypic risk score
+        self.impute_head = nn.Linear(hidden_dim, 1)
+        self.phenotype_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x_tokens, edge_index, edge_attr):
+    def forward(self, x_tokens, edge_index, edge_attr, node_degree=None, is_variant=None):
         """
         x_tokens: Integer indices of nucleotide sequence tokens [num_nodes, max_len]
+        node_degree: Log-scaled node degree [num_nodes, 1] — topological signal
+        is_variant: Variant slot indicator [num_nodes, 1] — topological indicator
         """
-        # Convert tokens to continuous embeddings [num_nodes, max_len, embed_dim]
-        x = self.token_embed(x_tokens)
-        
-        # Pool sequence token embeddings over the sequence length [num_nodes, embed_dim]
-        x = x.mean(dim=1)
-        
+        # Convert tokens to continuous embeddings, pool over sequence length
+        x = self.token_embed(x_tokens).mean(dim=1)  # [num_nodes, embed_dim]
+
+        # Concatenate degree and variant topological signals
+        features = [x]
+        if node_degree is not None:
+            features.append(node_degree)
+        else:
+            features.append(torch.zeros(x.size(0), 1, device=x.device))
+            
+        if is_variant is not None:
+            features.append(is_variant)
+        else:
+            features.append(torch.zeros(x.size(0), 1, device=x.device))
+            
+        x = torch.cat(features, dim=-1) # [num_nodes, embed_dim + 2]
+
         # Pass through custom P-GAT layers
         h = self.conv1(x, edge_index, edge_attr)
         h = self.conv2(h, edge_index, edge_attr)

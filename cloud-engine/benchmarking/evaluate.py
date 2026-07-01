@@ -61,13 +61,16 @@ def run_truvari_evaluation():
     all_preds = []
     all_targets = []
     
-    model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}" + (f" ({torch.cuda.get_device_name(0)})" if device.type == "cuda" else ""), flush=True)
+
+    model = PanGNNModel(num_vocab=6, embed_dim=64, hidden_dim=128, edge_dim=1, heads=4).to(device)
     model_loaded = False
     
     if os.path.exists(model_path) and pt_files:
         try:
             print("Loading trained GNN weights...")
-            state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+            state_dict = torch.load(model_path, map_location=device)
             model.load_state_dict(state_dict)
             model.eval()
             model_loaded = True
@@ -80,7 +83,13 @@ def run_truvari_evaluation():
                 
                 with torch.no_grad():
                     for batch in loader:
-                        _, impute_prob, _ = model(batch.x, batch.edge_index, batch.edge_attr)
+                        batch = batch.to(device)
+                        _, impute_prob, _ = model(
+                            batch.x, batch.edge_index, batch.edge_attr,
+                            node_degree=batch.node_degree if hasattr(batch, 'node_degree') else None,
+                            is_variant=batch.is_variant if hasattr(batch, 'is_variant') else None
+                        )
+                        # All nodes in sequential subgraph are seed nodes
                         all_preds.append(impute_prob.cpu().numpy().flatten())
                         all_targets.append(batch.y_impute.cpu().numpy().flatten())
             

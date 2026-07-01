@@ -32,12 +32,15 @@ class PangenomeDataset:
 
         x_list = []
         node_freq = []
+        is_var_list = []
         for node in nodes:
             tokens = self.tokenize_sequence(node['sequence'], max_len=10)
             x_list.append(tokens)
             node_freq.append(node.get('frequency', 1.0))
+            is_var_list.append([1.0 if node.get('type') == "Structural Variant Slot" else 0.0])
             
         x_tokens = torch.tensor(x_list, dtype=torch.long) # [num_nodes, max_len]
+        is_variant = torch.tensor(is_var_list, dtype=torch.float) # [num_nodes, 1]
         
         edge_sources = []
         edge_targets = []
@@ -54,6 +57,16 @@ class PangenomeDataset:
         edge_index = torch.tensor([edge_sources, edge_targets], dtype=torch.long) # [2, num_edges]
         edge_attr = torch.tensor(edge_freqs, dtype=torch.float)                 # [num_edges, 1]
 
+        # Compute per-node degree (in + out) on the FULL graph.
+        # This is a critical topological feature: linear reference nodes have degree 2,
+        # SV bubble entry/exit nodes have degree 3+. Without this, nucleotide sequences
+        # alone cannot distinguish reference from variant nodes.
+        from torch_geometric.utils import degree as pyg_degree
+        deg_out = pyg_degree(edge_index[0], num_nodes=num_nodes)
+        deg_in  = pyg_degree(edge_index[1], num_nodes=num_nodes)
+        deg_total = (deg_out + deg_in).float().unsqueeze(1)   # [num_nodes, 1]
+        node_degree = torch.log1p(deg_total)                  # log-scale: keeps high-degree outliers in range
+
         y_impute = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1)      # [num_nodes, 1]
         y_pheno = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1) * 2.5 # [num_nodes, 1]
 
@@ -62,35 +75,66 @@ class PangenomeDataset:
             edge_index=edge_index,
             edge_attr=edge_attr,
             y_impute=y_impute,
-            y_pheno=y_pheno
+            y_pheno=y_pheno,
+            node_degree=node_degree,
+            is_variant=is_variant,
         )
         return data
 
-    def get_loader(self, data: Data, batch_size: int = 2000, max_subgraphs: int = None) -> list:
+    def get_loader(self, data: Data, batch_size: int = 2000, max_subgraphs: int = None):
         """
-        Splits the single large graph into multiple connected subgraphs.
-        Partitions nodes consecutively (representing chromosomal corridors)
-        and filters out any subgraphs that contain 0 edges to avoid GNN crash.
+        Splits the chromosome graph into sequential subgraphs with a random starting
+        offset so batch boundaries differ each epoch. Sequential slicing is correct for
+        pangenome GFAs because consecutive node IDs ARE adjacent in the reference backbone
+        — this preserves real bubble/branch edges within each batch.
+
+        NeighborLoader was removed: it requires 'pyg-lib' or 'torch-sparse' which are
+        not available in the Docker image. This pure-PyTorch approach has no external deps.
+
+        All nodes in each subgraph are seed nodes (no context dilution), so loss is
+        computed over the full batch without masking.
         """
+        import random as _rnd
         num_nodes = data.num_nodes
         subgraphs = []
-        
-        # Sequentially scan blocks of nodes
-        i = 0
-        while i < num_nodes:
+
+        # Random offset so we get different batch boundaries each epoch
+        offset = _rnd.randint(0, max(0, batch_size - 1))
+
+        for start in range(offset, num_nodes, batch_size):
             if max_subgraphs is not None and len(subgraphs) >= max_subgraphs:
                 break
-            batch_nodes = torch.arange(i, min(i + batch_size, num_nodes))
-            sub_data = data.subgraph(batch_nodes)
-            
-            # Only keep subgraphs that have actual structural variant links/edges
-            if sub_data.edge_index.numel() > 0:
-                subgraphs.append(sub_data)
-                
-            i += batch_size
-            
-        # Fallback: if no subgraphs with edges are found, return the first slice
+            end = min(start + batch_size, num_nodes)
+            batch_nodes = torch.arange(start, end)
+            sub = data.subgraph(batch_nodes)
+
+            # Explicitly carry node_degree and is_variant (custom attrs — subgraph() may skip them)
+            if hasattr(data, 'node_degree') and data.node_degree is not None:
+                sub.node_degree = data.node_degree[batch_nodes]
+            if hasattr(data, 'is_variant') and data.is_variant is not None:
+                sub.is_variant = data.is_variant[batch_nodes]
+
+            if sub.edge_index.numel() > 0:
+                subgraphs.append(sub)
+
+        # Also include the initial offset chunk (nodes 0..offset-1) if any
+        if offset > 0:
+            batch_nodes = torch.arange(0, offset)
+            sub = data.subgraph(batch_nodes)
+            if hasattr(data, 'node_degree') and data.node_degree is not None:
+                sub.node_degree = data.node_degree[batch_nodes]
+            if hasattr(data, 'is_variant') and data.is_variant is not None:
+                sub.is_variant = data.is_variant[batch_nodes]
+            if sub.edge_index.numel() > 0:
+                subgraphs.append(sub)
+
         if not subgraphs:
-            subgraphs.append(data.subgraph(torch.arange(0, min(batch_size, num_nodes))))
-            
+            fallback_nodes = torch.arange(0, min(batch_size, num_nodes))
+            fallback = data.subgraph(fallback_nodes)
+            if hasattr(data, 'node_degree') and data.node_degree is not None:
+                fallback.node_degree = data.node_degree[fallback_nodes]
+            if hasattr(data, 'is_variant') and data.is_variant is not None:
+                fallback.is_variant = data.is_variant[fallback_nodes]
+            subgraphs.append(fallback)
+
         return subgraphs
