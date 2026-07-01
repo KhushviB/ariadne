@@ -21,14 +21,14 @@ def save_checkpoint(state, checkpoint_dir, filename="checkpoint.pt"):
     torch.save(state, filepath)
     print(f"Checkpoint saved: '{filepath}'")
 
-def load_checkpoint(checkpoint_path, model, optimizer):
-    """Loads model checkpoint state."""
+def load_checkpoint(checkpoint_path, model, optimizer, device):
+    """Loads model checkpoint state onto the target device."""
     if not os.path.exists(checkpoint_path):
         print(f"No checkpoint found at '{checkpoint_path}'")
         return 0, None
     
     print(f"Loading checkpoint '{checkpoint_path}'...")
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     epoch = checkpoint['epoch']
@@ -36,7 +36,22 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     print(f"Resuming from epoch {epoch} (loss: {loss:.4f})")
     return epoch, loss
 
-def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, lr=0.01):
+def focal_loss(pred, target, pos_weight, gamma=2.0, eps=1e-7):
+    """
+    Focal loss for extreme class imbalance.
+    Downweights easy negatives (the 31:1 majority) so the model
+    focuses gradient on hard positives (SV nodes) rather than
+    collapsing to predict-everything-positive.
+    gamma=2.0 is standard; pos_weight still corrects for imbalance.
+    """
+    pred = pred.clamp(eps, 1.0 - eps)
+    bce_pos = -torch.log(pred)
+    bce_neg = -torch.log(1.0 - pred)
+    focal_pos = pos_weight * target * ((1.0 - pred) ** gamma) * bce_pos
+    focal_neg = (1.0 - target) * (pred ** gamma) * bce_neg
+    return (focal_pos + focal_neg).mean()
+
+def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, lr=0.001):
     """Executes memory-efficient incremental training loop for PanGNN."""
     if data_dir is None:
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
@@ -109,7 +124,10 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     print(f"Global distribution: Positives={int(global_pos)}, Negatives={int(global_neg)}, Ratio={global_pos_weight:.2f}:1", flush=True)
 
     # 2. Model setup
-    model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}" + (f" ({torch.cuda.get_device_name(0)})" if device.type == "cuda" else ""), flush=True)
+
+    model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Loss functions
@@ -120,7 +138,7 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     
     # Try to restore checkpoint
     if os.path.exists(checkpoint_path):
-        start_epoch, _ = load_checkpoint(checkpoint_path, model, optimizer)
+        start_epoch, _ = load_checkpoint(checkpoint_path, model, optimizer, device)
 
     print("Beginning GNN training loops...", flush=True)
     model.train()
@@ -140,11 +158,12 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
             print(f"Epoch {epoch+1}/{epochs} | Loading {chr_name} for training batch...", flush=True)
             
             try:
-                chr_data = torch.load(pt_path)
+                chr_data = torch.load(pt_path, map_location="cpu")
                 ds = PangenomeDataset()
                 loader = ds.get_loader(chr_data, batch_size=batch_size)
                 
                 for batch in loader:
+                    batch = batch.to(device)
                     optimizer.zero_grad()
                     
                     # Pass node token matrix directly. Pooling is done inside the model.
@@ -162,9 +181,9 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
                         neg_pred_sum += impute_prob.squeeze(-1)[neg_mask].sum().item()
                         neg_pred_count += neg_mask.sum().item()
                     
-                    eps = 1e-7
-                    # Use the stable global pos_weight constant
-                    loss_impute = - (global_pos_weight * is_pos * torch.log(impute_prob + eps) + (1.0 - is_pos) * torch.log(1.0 - impute_prob + eps)).mean()
+                    # Focal loss: handles 31:1 imbalance without collapsing
+                    # to predict-everything-positive local minimum
+                    loss_impute = focal_loss(impute_prob, is_pos, global_pos_weight)
                         
                     loss_pheno = criterion_pheno(pheno_risk, batch.y_pheno)
                     
@@ -205,4 +224,4 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=1, batch_size=2000, l
     torch.save(model.state_dict(), os.path.join(checkpoint_dir, "pangnn_final.pth"))
 
 if __name__ == '__main__':
-    train_model(epochs=1)
+    train_model(epochs=30)

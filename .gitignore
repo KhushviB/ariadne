@@ -23,6 +23,8 @@ ENV/
 
 # Large Biological Datasets & Binary Graph Files (Cloud Ingest outputs)
 data/
+results/
+figures/
 *.fa
 *.fa.gz
 *.vcf
