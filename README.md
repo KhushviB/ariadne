@@ -1,6 +1,6 @@
 # PanGNN: A Topological Foundation Model for Structural Variant Imputation and Phenotypic Mapping on Heterogeneous Pangenome Graphs
 
-Project Ariadne (**PanGNN**) introduces a novel Graph Neural Network architecture designed to operate directly on graphical pangenomes (Directed Acyclic Graphs in GFA formats) to impute structural variants ($\ge$50bp) and predict clinical phenotypes. By replacing traditional flat sequence coordinates with spatial attention pathway learning, PanGNN eliminates alignment reference biases that skew standard DNA sequencing pipelines.
+Project Ariadne (**PanGNN**) introduces a novel Graph Neural Network architecture designed to operate directly on graphical pangenomes (Directed Acyclic Graphs in GFA formats) to impute structural variants (≥ 50bp) and predict clinical phenotypes. By replacing traditional flat sequence coordinates with spatial attention pathway learning, PanGNN eliminates alignment reference biases that skew standard DNA sequencing pipelines.
 
 ---
 
