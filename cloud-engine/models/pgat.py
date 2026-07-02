@@ -8,7 +8,7 @@ class PGATConv(MessagePassing):
     """
     Path-Aware Graph Attention (P-GAT) Conv Layer
     Formalized as:
-    h_v^{(l+1)} = \sigma( W^{(l)} h_v^{(l)} + \sum_{u \in \mathcal{N}(v)} \alpha_{uv}^{(l)} M^{(l)}(h_u^{(l)}, \mathbf{e}_{uv}) )
+    h_v^{(l+1)} = σ( W^{(l)} h_v^{(l)} + Σ_{u ∈ N(v)} α_{uv}^{(l)} M^{(l)}(h_u^{(l)}, e_{uv}) )
     """
     def __init__(self, in_channels: int, out_channels: int, edge_dim: int, heads: int = 1):
         super(PGATConv, self).__init__(aggr='add', flow='source_to_target', node_dim=0)
@@ -35,23 +35,23 @@ class PGATConv(MessagePassing):
         """
         x: [num_nodes, in_channels]
         edge_index: [2, num_edges]
-        edge_attr: [num_edges, edge_dim] (e.g. population transition frequency)
+        edge_attr: [num_edges, edge_dim] (edge type encoding)
         """
-        # Step 1: Project node features (keep 2D for PyG propagate compatibility)
-        h_nodes = self.W(x) # [num_nodes, heads * out_channels]
+        # Step 1: Project node features
+        h_nodes = self.W(x)
         
-        # Step 2: Run message passing (explicitly pass size to avoid PyG shape inference mismatch)
+        # Step 2: Message passing
         out = self.propagate(edge_index, x=x, h_nodes=h_nodes, edge_attr=edge_attr, size=(x.size(0), x.size(0)))
         
-        # Dynamically align output size to match target node count (handles isolated nodes and PyG shape quirks)
+        # Handle isolated nodes
         if out.size(0) < x.size(0):
             padding = torch.zeros(x.size(0) - out.size(0), *out.shape[1:], dtype=out.dtype, device=out.device)
             out = torch.cat([out, padding], dim=0)
             
-        # Step 3: Mean head aggregation (reshape and take mean over heads)
+        # Step 3: Mean head aggregation
         out = out.view(-1, self.heads, self.out_channels).mean(dim=1)
         
-        # Step 4: Add self loop representation and apply non-linearity
+        # Step 4: Self-loop + non-linearity
         h_self = self.W(x).view(-1, self.heads, self.out_channels).mean(dim=1)
         out = out + h_self
         return F.elu(out)
@@ -61,77 +61,96 @@ class PGATConv(MessagePassing):
         x_j: Source node raw features [num_edges, in_channels]
         h_nodes_i: Target projected features [num_edges, heads * out_channels]
         h_nodes_j: Source projected features [num_edges, heads * out_channels]
-        edge_attr: Edge features (population frequency) [num_edges, edge_dim]
+        edge_attr: Edge features (edge type) [num_edges, edge_dim]
         """
-        # Reshape source/target projections back to 3D [num_edges, heads, out_channels]
         h_nodes_i = h_nodes_i.view(-1, self.heads, self.out_channels)
         h_nodes_j = h_nodes_j.view(-1, self.heads, self.out_channels)
 
-        # Step 1: Concatenate features and project globally BEFORE head division
-        msg_input = torch.cat([x_j, edge_attr], dim=-1)             # [num_edges, in_channels + edge_dim]
-        msg = self.M(msg_input)                                     # [num_edges, heads * out_channels]
-        msg = msg.view(-1, self.heads, self.out_channels)           # [num_edges, heads, out_channels]
+        # Message: concatenate source features + edge features, then project
+        msg_input = torch.cat([x_j, edge_attr], dim=-1)
+        msg = self.M(msg_input)
+        msg = msg.view(-1, self.heads, self.out_channels)
 
-        # Step 2: Compute structural attention coefficients (alpha)
-        alpha_input = torch.cat([h_nodes_i, h_nodes_j], dim=-1)     # [num_edges, heads, 2 * out_channels]
-        alpha = (alpha_input * self.att).sum(dim=-1)                # [num_edges, heads]
+        # Attention coefficients
+        alpha_input = torch.cat([h_nodes_i, h_nodes_j], dim=-1)
+        alpha = (alpha_input * self.att).sum(dim=-1)
         alpha = F.leaky_relu(alpha, 0.2)
+        alpha = softmax(alpha, index, ptr, num_nodes=size_i)
         
-        # Softmax over neighboring nodes
-        alpha = softmax(alpha, index, ptr, num_nodes=size_i)        # [num_edges, heads]
-        
-        # Return message weighted by attention
-        return msg * alpha.unsqueeze(-1)                            # [num_edges, heads, out_channels]
+        return msg * alpha.unsqueeze(-1)
 
 
 class PanGNNModel(nn.Module):
     """
-    Consolidated PanGNN model mapping allele node sequences to embeddings 
-    and predicting variant imputation probability and phenotypic risk scores.
-    conv1 takes embed_dim + 1 because node degree (1 scalar, log-scaled) is
-    concatenated to the sequence embedding before the first GAT layer.
+    PanGNN v2: Bubble-Aware Graph Attention Network for Pangenome Variant Detection.
+    
+    Architecture:
+    - Feature encoder: projects 71-dim input (64 kmer + 5 BAPE + 1 degree + 1 length)
+      to hidden_dim through a 2-layer MLP
+    - 3 P-GAT layers with residual connections for 3-hop receptive field
+    - Classification head: binary ref vs alt allele prediction
     """
-    def __init__(self, num_vocab: int, embed_dim: int, hidden_dim: int, edge_dim: int, heads: int = 2):
+    def __init__(self, input_dim: int = 71, hidden_dim: int = 128, edge_dim: int = 1, heads: int = 4):
         super(PanGNNModel, self).__init__()
-        # Nucleotide token embedding layer
-        self.token_embed = nn.Embedding(num_vocab, embed_dim)
         
-        # Topological feature projection (projects log-degree and log-length)
-        self.topo_proj = nn.Linear(2, embed_dim)
+        # Feature encoder: projects heterogeneous 71-dim features to hidden_dim
+        self.feature_encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ELU(),
+        )
         
-        # conv1 takes concatenated sequence and topological projected embeddings
-        self.conv1 = PGATConv(embed_dim * 2, hidden_dim, edge_dim, heads=heads)
+        # 3-layer P-GAT with residual connections
+        self.conv1 = PGATConv(hidden_dim, hidden_dim, edge_dim, heads=heads)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        
         self.conv2 = PGATConv(hidden_dim, hidden_dim, edge_dim, heads=heads)
+        self.norm2 = nn.LayerNorm(hidden_dim)
+        
+        self.conv3 = PGATConv(hidden_dim, hidden_dim, edge_dim, heads=heads)
+        self.norm3 = nn.LayerNorm(hidden_dim)
+        
+        # Dropout for regularization
+        self.dropout = nn.Dropout(0.1)
         
         # Predictor heads
-        self.impute_head = nn.Linear(hidden_dim, 1)
+        self.impute_head = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ELU(),
+            nn.Linear(hidden_dim // 2, 1),
+        )
         self.phenotype_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x_tokens, edge_index, edge_attr, node_degree=None, node_len=None):
+    def forward(self, x_features, edge_index, edge_attr):
         """
-        x_tokens: Integer indices of nucleotide sequence tokens [num_nodes, max_len]
-        node_degree: Log-scaled node degree [num_nodes, 1] — topological signal
-        node_len: Log-scaled node sequence length [num_nodes, 1] — physical length signal
+        x_features: Continuous feature matrix [num_nodes, input_dim=71]
+                     Contains k-mer freqs, BAPE encoding, degree, length
+        edge_index: [2, num_edges] (bidirectional)
+        edge_attr: [num_edges, 1] (edge type: 0=backbone, 1=branch)
         """
-        # Convert tokens to continuous embeddings, pool over sequence length
-        x_seq = self.token_embed(x_tokens).mean(dim=1)  # [num_nodes, embed_dim]
-
-        # Stack topological signals
-        deg = node_degree if node_degree is not None else torch.zeros(x_seq.size(0), 1, device=x_seq.device)
-        length = node_len if node_len is not None else torch.zeros(x_seq.size(0), 1, device=x_seq.device)
-        topo = torch.cat([deg, length], dim=-1) # [num_nodes, 2]
+        # Encode heterogeneous features to hidden_dim
+        h = self.feature_encoder(x_features)  # [N, hidden_dim]
         
-        # Project topo features to match sequence embedding scale
-        x_topo = self.topo_proj(topo) # [num_nodes, embed_dim]
+        # P-GAT Layer 1 with residual
+        h_res = h
+        h = self.conv1(h, edge_index, edge_attr)
+        h = self.norm1(h + h_res)
+        h = self.dropout(h)
         
-        # Concatenate sequence and topological embeddings
-        x = torch.cat([x_seq, x_topo], dim=-1) # [num_nodes, embed_dim * 2]
-
-        # Pass through custom P-GAT layers
-        h = self.conv1(x, edge_index, edge_attr)
+        # P-GAT Layer 2 with residual
+        h_res = h
         h = self.conv2(h, edge_index, edge_attr)
+        h = self.norm2(h + h_res)
+        h = self.dropout(h)
         
-        # Predict logits
+        # P-GAT Layer 3 with residual
+        h_res = h
+        h = self.conv3(h, edge_index, edge_attr)
+        h = self.norm3(h + h_res)
+        
+        # Predict
         impute_logits = self.impute_head(h)
         phenotype_risk = self.phenotype_head(h)
         

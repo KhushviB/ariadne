@@ -120,7 +120,7 @@ class HardwareProfiler:
 if __name__ == '__main__':
     # Initialize components
     profiler = HardwareProfiler()
-    model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
+    model = PanGNNModel(input_dim=71, hidden_dim=32, edge_dim=1, heads=2)
     
     # Locate a test data file
     data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))

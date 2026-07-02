@@ -33,7 +33,7 @@ def run_significance_testing(samples_count=100):
     # 1. Gather live predictions
     if os.path.exists(model_path) and pt_files:
         try:
-            model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
+            model = PanGNNModel(input_dim=71, hidden_dim=32, edge_dim=1, heads=2)
             state_dict = torch.load(model_path, map_location=torch.device('cpu'))
             model.load_state_dict(state_dict)
             model.eval()

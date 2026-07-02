@@ -1,133 +1,191 @@
 import os
 import json
-import gzip
-import random
-import glob
-import subprocess
-import sys
 
-def split_vcf_once(vcf_path, data_dir):
-    """
-    Splits the main whole-genome VCF file into chromosome-specific TSV files
-    in a single pass using a fast, C-accelerated gunzip | awk piped command.
-    Filters variants to only keep those within the active pangenome window [900kb, 5Mb]
-    to prevent Python from looping over millions of out-of-bounds SNPs.
-    """
-    print("One-time optimization: Partitioning whole-genome VCF in a single pass using C-accelerated awk...", flush=True)
-    
-    # Clean up any old, bulky TSV files from previous attempts
-    for f in glob.glob(os.path.join(data_dir, "variants_*.tsv")):
-        try:
-            print(f"[VCF PARTITIONER] Removing older legacy cache file: {f}...", flush=True)
-            os.remove(f)
-        except Exception:
-            pass
-            
-    # Pre-create all 22 chromosome files to prevent FileNotFoundError on chromosomes with 0 variants in window
-    for chrom in range(1, 23):
-        tsv_path = os.path.join(data_dir, f"variants_{chrom}.tsv")
-        try:
-            with open(tsv_path, 'w') as f:
-                f.write("pos\tend_pos\tAF\n")
-        except Exception as e:
-            print(f"[VCF PARTITIONER] Warning: Failed to pre-create empty {tsv_path}: {e}", flush=True)
-            
-    safe_data_dir = data_dir.replace('\\', '/')
-    
-    # awk script to parse columns 2 (POS), 4 (REF), 5 (ALT), and 8 (INFO)
-    # and split them by chromosome autosome ID
-    awk_script = (
-        '!/^#/ {'
-        '  chrom=$1; gsub(/^chr/, "", chrom);'
-        '  if (chrom ~ /^[0-9]+$/ && chrom >= 1 && chrom <= 22) {'
-        '    out="' + safe_data_dir + '/variants_" chrom ".tsv";'
-        '    print $2 "\t" $4 "\t" $5 "\t" $8 > out;'
-        '  }'
-        '}'
-    )
-    
-    cmd = f"gunzip -c {vcf_path} | awk -F'\\t' '{awk_script}'"
-    print(f"[VCF PARTITIONER] Executing system pipeline:\n  {cmd}", flush=True)
-    
-    try:
-        # Run C-piped decompression and partitioning
-        subprocess.run(cmd, shell=True, check=True)
-        print("[VCF PARTITIONER] SUCCESS: awk partitioning pipeline completed.", flush=True)
-    except Exception as e:
-        print(f"[VCF PARTITIONER] CRITICAL HANG OR ERROR: awk execution failed: {e}", flush=True)
-        raise RuntimeError(f"CRITICAL ERROR: awk-based VCF partitioning failed: {e}")
+# ---------------------------------------------------------------------------
+# Path-Agnostic Superbubble Detection (Topology Only — No Reference Path Used)
+# ---------------------------------------------------------------------------
 
-def load_giab_variants(vcf_path, chr_id, min_pos, max_pos):
+def detect_superbubbles(adj, all_node_ids):
     """
-    Queries variant coordinates and allele frequencies from the GIAB VCF file.
-    Uses partitioned chromosome-specific TSV files.
+    Detects superbubbles using ONLY graph topology (node degree).
+    
+    Does NOT use reference path information — the detection is purely structural.
+    A bubble is defined as two high-degree nodes (degree >= 3) connected by
+    2+ parallel paths through degree-2 interior nodes.
+    
+    In a vg-construct graph, every VCF variant creates exactly one bubble:
+        source(deg>=3) → ref_allele(deg=2) → sink(deg>=3)
+                       → alt_allele(deg=2) →
+    
+    BOTH ref_allele and alt_allele are marked as interior — no label leakage.
+    
+    Returns:
+        bubbles: list of dicts with keys:
+            - source: int
+            - sink: int
+            - interior: set of int (ALL interior nodes on ALL paths)
+            - n_paths: int (number of parallel paths)
     """
-    data_dir = os.path.dirname(vcf_path)
-    chrom_tsv_path = os.path.join(data_dir, f"variants_{chr_id}.tsv")
+    # 1. Compute degree for each node (using unique neighbors)
+    degrees = {}
+    for nid in all_node_ids:
+        neighbors = adj.get(nid, [])
+        degrees[nid] = len(set(neighbors))
     
-    print(f"[VCF LOADER] Target VCF: {vcf_path}", flush=True)
-    print(f"[VCF LOADER] Target TSV Cache: {chrom_tsv_path}", flush=True)
+    # 2. Find branching points (degree >= 3) — potential bubble boundaries
+    branch_nodes = set(nid for nid, deg in degrees.items() if deg >= 3)
     
-    # Auto-detect and remove legacy bulky caches (> 50 MB)
-    if os.path.exists(chrom_tsv_path):
-        file_size = os.path.getsize(chrom_tsv_path)
-        print(f"[VCF LOADER] Found existing TSV cache. File size: {file_size / 1024 / 1024:.2f} MB", flush=True)
-        if file_size > 50 * 1024 * 1024:
-            print(f"[VCF LOADER] Bulky legacy cache detected (>50MB). Deleting to force optimized rebuild...", flush=True)
-            try:
-                os.remove(chrom_tsv_path)
-                print(f"[VCF LOADER] Bulky cache deleted successfully.", flush=True)
-            except Exception as e:
-                print(f"[VCF LOADER] Warning: Could not delete bulky cache: {e}", flush=True)
-                
-    # If partition TSV does not exist, trigger the single-pass partitioner
-    if not os.path.exists(chrom_tsv_path):
-        print(f"[VCF LOADER] TSV Cache missing for Chromosome {chr_id}. Checking main VCF source...", flush=True)
-        if not os.path.exists(vcf_path):
-            raise FileNotFoundError(
-                f"CRITICAL ERROR: GIAB HG002 benchmark VCF file not found at '{vcf_path}'."
-            )
-        print(f"[VCF LOADER] Main VCF source verified. Triggering VCF partitioner...", flush=True)
-        split_vcf_once(vcf_path, data_dir)
+    # 3. From each branching node, trace paths through degree-2 nodes
+    #    to find connecting branching nodes. A bubble exists when 2+ paths
+    #    connect the same pair.
+    bubbles = []
+    visited_pairs = set()
+    
+    for source in branch_nodes:
+        paths_from_source = {}  # sink_id -> list of paths (each path = list of interior nodes)
         
-    variants = []
-    print(f"[VCF LOADER] Loading coordinates from partition: {chrom_tsv_path}...", flush=True)
+        source_neighbors = set(adj.get(source, []))
+        
+        for neighbor in source_neighbors:
+            if neighbor == source:
+                continue
+            
+            if neighbor in branch_nodes:
+                # Direct edge source → neighbor (both high-degree)
+                # This is a "0-interior-node" path (edge-only connection)
+                sink = neighbor
+                if sink not in paths_from_source:
+                    paths_from_source[sink] = []
+                paths_from_source[sink].append([])  # Empty interior
+                continue
+            
+            # Trace through degree-2 nodes until we hit another branching node
+            path_interior = [neighbor]
+            current = neighbor
+            prev = source
+            found_sink = False
+            
+            max_steps = 500  # Safety limit for very long paths
+            steps = 0
+            
+            while degrees.get(current, 0) == 2 and steps < max_steps:
+                steps += 1
+                current_neighbors = set(adj.get(current, []))
+                next_nodes = [n for n in current_neighbors if n != prev]
+                if not next_nodes:
+                    break
+                prev = current
+                current = next_nodes[0]
+                
+                if current == source:
+                    # Cycle back to source — skip
+                    break
+                    
+                if degrees.get(current, 0) >= 3:
+                    # Reached another branching node — this is the sink
+                    found_sink = True
+                    break
+                else:
+                    path_interior.append(current)
+            
+            if found_sink:
+                sink = current
+                if sink not in paths_from_source:
+                    paths_from_source[sink] = []
+                paths_from_source[sink].append(path_interior)
+        
+        # A bubble exists when 2+ paths connect source to the same sink
+        for sink, paths in paths_from_source.items():
+            pair = (min(source, sink), max(source, sink))
+            if len(paths) >= 2 and pair not in visited_pairs:
+                visited_pairs.add(pair)
+                all_interior = set()
+                for p in paths:
+                    for nid in p:
+                        all_interior.add(nid)
+                
+                bubbles.append({
+                    'source': source,
+                    'sink': sink,
+                    'interior': all_interior,
+                    'n_paths': len(paths),
+                    'paths': paths,
+                })
     
-    lines_read = 0
-    with open(chrom_tsv_path, 'r') as f:
-        for line in f:
-            lines_read += 1
-            parts = line.strip().split('\t')
-            if len(parts) < 4:
-                continue
-            try:
-                pos = int(parts[0])
-                ref = parts[1]
-                alt = parts[2]
-                info = parts[3]
-                var_len = max(len(ref), len(alt))
-                
-                # Match coordinates within GFA window
-                if max(min_pos, pos) < min(max_pos, pos + var_len):
-                    af = 0.50
-                    if "AF=" in info:
-                        for tag in info.split(';'):
-                            if tag.startswith("AF="):
-                                try:
-                                    af = float(tag.split('=')[1].split(',')[0])
-                                except Exception:
-                                    af = 0.50
-                    variants.append((pos, pos + var_len, af))
-            except ValueError:
-                continue
-                
-    print(f"[VCF LOADER] Read {lines_read} records. Found {len(variants)} variants in GFA range [{min_pos}, {max_pos}].", flush=True)
-    return variants
+    return bubbles
+
+
+def compute_bubble_metadata(bubbles):
+    """
+    Computes per-node bubble metadata from detected superbubbles.
+    
+    ALL interior nodes (both ref-allele and alt-allele paths) receive
+    the same structural encoding. The model cannot distinguish ref from
+    alt using BAPE alone — it must learn from sequence features.
+    
+    Returns:
+        node_meta: dict mapping node_id -> bubble metadata dict
+    """
+    node_meta = {}
+    
+    for bubble_id, bubble in enumerate(bubbles):
+        source = bubble['source']
+        sink = bubble['sink']
+        n_paths = bubble['n_paths']
+        
+        # Mark source (topological role — always degree >= 3)
+        if source not in node_meta:
+            node_meta[source] = {
+                'bubble_id': bubble_id,
+                'is_source': True,
+                'is_sink': False,
+                'is_interior': False,
+                'n_paths': n_paths,
+                'path_position': 0.0,
+            }
+        
+        # Mark sink (topological role — always degree >= 3)
+        if sink not in node_meta:
+            node_meta[sink] = {
+                'bubble_id': bubble_id,
+                'is_source': False,
+                'is_sink': True,
+                'is_interior': False,
+                'n_paths': n_paths,
+                'path_position': 1.0,
+            }
+        
+        # Mark ALL interior nodes on ALL paths (both ref and alt alleles)
+        for path in bubble['paths']:
+            path_len = len(path)
+            for i, nid in enumerate(path):
+                if nid not in node_meta:
+                    pos = (i + 1) / max(path_len + 1, 2)
+                    node_meta[nid] = {
+                        'bubble_id': bubble_id,
+                        'is_source': False,
+                        'is_sink': False,
+                        'is_interior': True,
+                        'n_paths': n_paths,
+                        'path_position': pos,
+                    }
+    
+    return node_meta
+
+
+# ---------------------------------------------------------------------------
+# GFA Parser — Main Entry Point
+# ---------------------------------------------------------------------------
 
 def parse_gfa(gfa_path):
     """
     Parses segment (S) and linkage (L) lines from a GFA format file,
-    computes node coordinates from reference paths, and intersects them with real VCF variant loci.
+    detects superbubbles using ONLY graph topology (no reference path for 
+    feature computation), and labels nodes by reference-path membership.
+    
+    KEY DESIGN: Features are derived from topology + sequence content.
+                Labels are derived from reference-path membership.
+                There is NO information flow from labels to features.
     """
     filename = os.path.basename(gfa_path)
     chr_id = filename.replace("chr", "").replace(".gfa", "")
@@ -136,7 +194,6 @@ def parse_gfa(gfa_path):
     raw_nodes = []
     edges_raw = []
     ref_path_nodes = []
-    chr_start_offset = 0
     
     with open(gfa_path, 'r') as f:
         for line in f:
@@ -165,10 +222,6 @@ def parse_gfa(gfa_path):
             elif parts[0] == 'W':
                 seq_id = parts[3].replace("chr", "").replace("GRCh38.", "")
                 if seq_id == str(chr_id):
-                    try:
-                        chr_start_offset = int(parts[4])
-                    except ValueError:
-                        chr_start_offset = 0
                     nodes_list = parts[6].replace('<', '>').split('>')
                     for node_item in nodes_list:
                         if node_item:
@@ -183,19 +236,7 @@ def parse_gfa(gfa_path):
             f"found in GFA file '{gfa_path}'. Real coordinate alignment is impossible."
         )
 
-    # 2. Reconstruct genomic GRCh38 base-pair coordinates for each node
-    node_coords = {}
-    current_pos = chr_start_offset if chr_start_offset > 0 else 1000000
-    node_seqs = {nid: seq for nid, seq in raw_nodes}
-    
-    # Map reference path nodes
-    for nid in ref_path_nodes:
-        if nid in node_seqs:
-            seq_len = len(node_seqs[nid])
-            node_coords[nid] = (current_pos, current_pos + seq_len)
-            current_pos += seq_len
-
-    # Build adjacency index for constant-time neighbor lookups in O(E)
+    # 1. Build bidirectional adjacency map (used for topology-only analysis)
     print("[GFA PARSER] Building adjacency map...", flush=True)
     adj = {}
     for src, tgt in edges_raw:
@@ -207,106 +248,85 @@ def parse_gfa(gfa_path):
         adj[tgt].append(src)
     print(f"[GFA PARSER] Adjacency map indexed with {len(adj)} nodes.", flush=True)
 
-    # Align variant nodes that branched off the main path in O(N)
-    print("[GFA PARSER] Aligning branch node coordinates...", flush=True)
-    for nid, seq in raw_nodes:
-        if nid not in node_coords:
-            adjacent_ref = None
-            # Constant-time lookup of neighbors
-            for neighbor in adj.get(nid, []):
-                if neighbor in node_coords:
-                    adjacent_ref = neighbor
-                    break
-            
-            if adjacent_ref is not None:
-                ref_start, ref_end = node_coords[adjacent_ref]
-                node_coords[nid] = (ref_start, ref_start + len(seq))
-            else:
-                node_coords[nid] = (current_pos, current_pos + len(seq))
-                current_pos += len(seq)
-    print("[GFA PARSER] Branch node coordinates successfully aligned.", flush=True)
+    # 2. Detect superbubbles using ONLY graph topology (degree-based)
+    #    NO reference path information is used here — this is the key
+    #    anti-leakage design decision.
+    all_node_ids = [nid for nid, _ in raw_nodes]
+    
+    print("[GFA PARSER] Detecting superbubbles (topology-only, path-agnostic)...", flush=True)
+    bubbles = detect_superbubbles(adj, all_node_ids)
+    print(f"[GFA PARSER] Detected {len(bubbles)} superbubbles.", flush=True)
+    
+    # 3. Compute per-node bubble metadata (same encoding for ref AND alt alleles)
+    bubble_meta = compute_bubble_metadata(bubbles)
+    
+    # Count how many interior nodes are ref vs alt for diagnostic purposes
+    ref_path_set = set(ref_path_nodes)
+    interior_ref = sum(1 for nid, m in bubble_meta.items() if m['is_interior'] and nid in ref_path_set)
+    interior_alt = sum(1 for nid, m in bubble_meta.items() if m['is_interior'] and nid not in ref_path_set)
+    print(f"[GFA PARSER] Bubble metadata: {len(bubble_meta)} nodes total, "
+          f"{interior_ref} interior-ref, {interior_alt} interior-alt (both get is_interior=True)", flush=True)
 
-    # 3. Load VCF variants (raises FileNotFoundError if VCF is missing)
-    vcf_path = os.path.abspath(os.path.join(os.path.dirname(gfa_path), "variants.vcf.gz"))
-    min_pos = min(c[0] for c in node_coords.values()) if node_coords else 0
-    max_pos = max(c[1] for c in node_coords.values()) if node_coords else 0
-    print(f"[GFA PARSER] Coordinates mapped. Range: [{min_pos}, {max_pos}]", flush=True)
-    
-    real_variants = load_giab_variants(vcf_path, chr_id, min_pos, max_pos)
-    
-    # 4. Intersect GFA nodes with VCF variants using binary search in O(N log V)
-    print("[GFA PARSER] Intersecting nodes with VCF variants using binary search...", flush=True)
-    import bisect
-    
-    # Pre-extract variant start coordinates for binary search
-    v_starts = [v[0] for v in real_variants]
-    
+    # 4. Build node list — label by reference-path membership (purely topological label)
+    #    Features (BAPE) are derived from graph structure only, NOT from the label.
     nodes = []
-    variants_overlapped_count = 0
-    
-    # Safe maximum length boundary for structural variants to prevent unbounded backward scanning
-    MAX_VAR_LEN = 1000000
+    alt_count = 0
+    ref_count = 0
     
     for nid, seq in raw_nodes:
-        node_start, node_end = node_coords.get(nid, (0, 0))
-        overlap_variant = None
-        
-        # Binary search for the first variant starting at or after node_start
-        idx = bisect.bisect_left(v_starts, node_start)
-        
-        # 1. Check the candidate starting at or after node_start
-        if idx < len(real_variants):
-            v_start, v_end, af = real_variants[idx]
-            if v_start < node_end:
-                overlap_variant = af
-                
-        # 2. Scan backwards for any overlapping variants starting before node_start
-        if overlap_variant is None:
-            for i in range(idx - 1, -1, -1):
-                v_start, v_end, af = real_variants[i]
-                # Break immediately if the variant starts too far back to reach the node
-                if node_start - v_start > MAX_VAR_LEN:
-                    break
-                if v_end > node_start:
-                    overlap_variant = af
-                    break
-                    
-        node_type = "Reference"
-        frequency = 1.0
-        
-        if overlap_variant is not None:
-            node_type = "Structural Variant Slot"
-            frequency = overlap_variant
-            variants_overlapped_count += 1
-        elif len(seq) >= 50:
+        if nid in ref_path_set:
             node_type = "Reference"
             frequency = 1.0
-
+            ref_count += 1
+        else:
+            node_type = "Structural Variant Slot"
+            frequency = 0.5
+            alt_count += 1
+        
+        meta = bubble_meta.get(nid, {
+            'bubble_id': -1,
+            'is_source': False,
+            'is_sink': False,
+            'is_interior': False,
+            'n_paths': 0,
+            'path_position': 0.0,
+        })
+        
         nodes.append({
             "id": nid,
             "sequence": seq,
             "type": node_type,
-            "frequency": frequency
+            "frequency": frequency,
+            "bubble_id": meta['bubble_id'],
+            "is_source": meta['is_source'],
+            "is_sink": meta['is_sink'],
+            "is_interior": meta['is_interior'],
+            "n_paths": meta['n_paths'],
+            "path_position": meta['path_position'],
         })
 
-    # 5. Build links (edges) with static topological priors (1.0 for reference, 0.5 for variant bubbles)
-    node_types = {n["id"]: n["type"] for n in nodes}
+    print(f"[GFA PARSER] Labeling complete. Reference: {ref_count}, Alternative: {alt_count}", flush=True)
+
+    # 5. Build edges with uniform weights + topological edge type
+    #    Edge type is based on degree of endpoints, NOT on label
     edges = []
+    degrees = {nid: len(set(adj.get(nid, []))) for nid in all_node_ids}
+    
     for source, target in edges_raw:
-        is_ref_u = node_types.get(source, "Reference") == "Reference"
-        is_ref_v = node_types.get(target, "Reference") == "Reference"
-        edge_freq = 1.0 if (is_ref_u and is_ref_v) else 0.5
+        # Edge type: backbone if both endpoints have degree <= 2, branch otherwise
+        is_backbone = (degrees.get(source, 0) <= 2 and degrees.get(target, 0) <= 2)
         
         edges.append({
             "source": source,
             "target": target,
-            "frequency": edge_freq,
+            "frequency": 1.0,
+            "edge_type": "backbone" if is_backbone else "branch",
             "attention": 0.0,
-            "cohorts": ["Global"]  # Cohorts are not modeled in this single-sample verification harness
         })
 
-    print(f"[GFA PARSER] Ingestion complete. Overlapping variants annotated: {variants_overlapped_count}/{len(nodes)} nodes.", flush=True)
+    print(f"[GFA PARSER] Ingestion complete. {alt_count}/{len(nodes)} nodes labeled as alternative alleles.", flush=True)
     return nodes, edges
+
 
 def save_parsed_graph(nodes, edges, output_json_path):
     """Saves parsed GFA topology to a JSON file."""
@@ -319,6 +339,4 @@ def save_parsed_graph(nodes, edges, output_json_path):
     print(f"Graph schema saved to: {output_json_path}")
 
 if __name__ == '__main__':
-    # Execution validation example
-    # nodes, edges = parse_gfa("chr21.gfa")
     pass

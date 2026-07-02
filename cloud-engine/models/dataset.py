@@ -1,105 +1,160 @@
 import torch
 from torch_geometric.data import Data
 import numpy as np
+import math
 
 class PangenomeDataset:
     """
-    Translates parsed GFA components into PyG Data matrices and sets up
-    localized sub-graph mini-batching loaders.
+    PanGNN v2 Dataset Builder.
+    
+    Translates parsed GFA components into PyG Data matrices with:
+    - 3-mer frequency features (64 dims) over full node sequences
+    - Bubble-Aware Positional Encoding (BAPE, 5 dims)
+    - Log-scaled node degree (1 dim)
+    - Log-scaled sequence length (1 dim)
+    - Bidirectional edges with edge-type encoding
+    
+    Total node feature dimensionality: 71
     """
-    def __init__(self, vocab=None):
-        # Default nucleotide vocabulary mapping
-        self.vocab = vocab or {'A': 1, 'T': 2, 'G': 3, 'C': 4, 'N': 5, '<PAD>': 0}
-        self.rev_vocab = {v: k for k, v in self.vocab.items()}
-
-    def tokenize_sequence(self, seq: str, max_len: int = 10) -> list:
-        """Tokenize a nucleotide text string into integer codes."""
-        tokens = [self.vocab.get(char.upper(), 5) for char in seq]
-        if len(tokens) < max_len:
-            tokens += [0] * (max_len - len(tokens))
-        else:
-            tokens = tokens[:max_len]
-        return tokens
+    
+    BASE_MAP = {'A': 0, 'T': 1, 'G': 2, 'C': 3}
+    K = 3
+    KMER_DIM = 4 ** K  # 64 for 3-mers
+    
+    def compute_kmer_freqs(self, seq: str) -> list:
+        """Compute normalized 3-mer frequency vector over the full node sequence."""
+        counts = [0] * self.KMER_DIM
+        seq_upper = seq.upper()
+        n = len(seq_upper)
+        valid_count = 0
+        
+        for i in range(n - self.K + 1):
+            kmer = seq_upper[i:i + self.K]
+            idx = 0
+            valid = True
+            for c in kmer:
+                if c not in self.BASE_MAP:
+                    valid = False
+                    break
+                idx = idx * 4 + self.BASE_MAP[c]
+            if valid:
+                counts[idx] += 1
+                valid_count += 1
+        
+        # Normalize to frequency distribution
+        if valid_count > 0:
+            counts = [c / valid_count for c in counts]
+        
+        return counts
 
     def build_pyg_data(self, nodes: list, edges: list) -> Data:
         """
-        Builds a single PyTorch Geometric Data object.
-        nodes: list of dicts with keys: id, sequence, frequency
-        edges: list of dicts with keys: source, target, frequency
+        Builds a single PyTorch Geometric Data object with full feature engineering.
+        
+        nodes: list of dicts with keys: id, sequence, frequency, bubble metadata
+        edges: list of dicts with keys: source, target, frequency, edge_type
         """
         node_id_map = {n['id']: idx for idx, n in enumerate(nodes)}
         num_nodes = len(nodes)
 
-        x_list = []
-        node_freq = []
-        node_len_list = []
-        for node in nodes:
-            tokens = self.tokenize_sequence(node['sequence'], max_len=10)
-            x_list.append(tokens)
-            node_freq.append(node.get('frequency', 1.0))
-            # Log-scaled sequence length: a physical signal, not a target label
-            node_len_list.append([np.log1p(len(node.get('sequence', '')))])
-            
-        x_tokens = torch.tensor(x_list, dtype=torch.long) # [num_nodes, max_len]
-        node_len = torch.tensor(node_len_list, dtype=torch.float) # [num_nodes, 1]
+        # ── Feature computation ────────────────────────────────────────────
+        kmer_list = []       # [num_nodes, 64]
+        bape_list = []       # [num_nodes, 5]
+        degree_list = []     # placeholder, computed after edge_index
+        length_list = []     # [num_nodes, 1]
+        node_freq = []       # label target
         
+        for node in nodes:
+            seq = node.get('sequence', '')
+            
+            # 1. K-mer frequency features (64 dims)
+            kmer_list.append(self.compute_kmer_freqs(seq))
+            
+            # 2. BAPE — Bubble-Aware Positional Encoding (5 dims)
+            bape = [
+                1.0 if node.get('is_source', False) else 0.0,
+                1.0 if node.get('is_sink', False) else 0.0,
+                1.0 if node.get('is_interior', False) else 0.0,
+                float(node.get('path_position', 0.0)),
+                math.log1p(float(node.get('n_paths', 0))),
+            ]
+            bape_list.append(bape)
+            
+            # 3. Log-scaled sequence length (1 dim)
+            length_list.append([math.log1p(len(seq))])
+            
+            # 4. Label
+            node_freq.append(node.get('frequency', 1.0))
+
+        kmer_tensor = torch.tensor(kmer_list, dtype=torch.float)    # [N, 64]
+        bape_tensor = torch.tensor(bape_list, dtype=torch.float)    # [N, 5]
+        length_tensor = torch.tensor(length_list, dtype=torch.float) # [N, 1]
+        
+        # ── Edge construction (bidirectional) ──────────────────────────────
         edge_sources = []
         edge_targets = []
-        edge_freqs = []
+        edge_types = []  # 0.0 = backbone, 1.0 = branch
 
         for edge in edges:
             src = edge['source']
             tgt = edge['target']
             if src in node_id_map and tgt in node_id_map:
-                edge_sources.append(node_id_map[src])
-                edge_targets.append(node_id_map[tgt])
-                edge_freqs.append([edge.get('frequency', 1.0)])
+                src_idx = node_id_map[src]
+                tgt_idx = node_id_map[tgt]
+                etype = 0.0 if edge.get('edge_type', 'backbone') == 'backbone' else 1.0
+                
+                # Forward edge
+                edge_sources.append(src_idx)
+                edge_targets.append(tgt_idx)
+                edge_types.append([etype])
+                
+                # Reverse edge (bidirectional)
+                edge_sources.append(tgt_idx)
+                edge_targets.append(src_idx)
+                edge_types.append([etype])
 
-        edge_index = torch.tensor([edge_sources, edge_targets], dtype=torch.long) # [2, num_edges]
-        edge_attr = torch.tensor(edge_freqs, dtype=torch.float)                 # [num_edges, 1]
+        edge_index = torch.tensor([edge_sources, edge_targets], dtype=torch.long)
+        edge_attr = torch.tensor(edge_types, dtype=torch.float)  # [2*E, 1]
 
-        # Compute per-node degree (in + out) on the FULL graph.
-        # This is a critical topological feature: linear reference nodes have degree 2,
-        # SV bubble entry/exit nodes have degree 3+. Without this, nucleotide sequences
-        # alone cannot distinguish reference from variant nodes.
+        # ── Node degree (computed on bidirectional graph) ──────────────────
         from torch_geometric.utils import degree as pyg_degree
-        deg_out = pyg_degree(edge_index[0], num_nodes=num_nodes)
-        deg_in  = pyg_degree(edge_index[1], num_nodes=num_nodes)
-        deg_total = (deg_out + deg_in).float().unsqueeze(1)   # [num_nodes, 1]
-        node_degree = torch.log1p(deg_total)                  # log-scale: keeps high-degree outliers in range
+        deg = pyg_degree(edge_index[0], num_nodes=num_nodes)
+        node_degree = torch.log1p(deg.float()).unsqueeze(1)  # [N, 1]
+        
+        # ── Assemble full feature matrix (71 dims) ────────────────────────
+        # [kmer_64 | bape_5 | degree_1 | length_1] = 71
+        x_features = torch.cat([
+            kmer_tensor,     # 64
+            bape_tensor,     # 5
+            node_degree,     # 1
+            length_tensor,   # 1
+        ], dim=-1)  # [N, 71]
 
-        y_impute = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1)      # [num_nodes, 1]
-        y_pheno = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1) * 2.5 # [num_nodes, 1]
+        # ── Labels ────────────────────────────────────────────────────────
+        y_impute = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1)
+        y_pheno = y_impute * 2.5
 
         data = Data(
-            x=x_tokens,
+            x=x_features,
             edge_index=edge_index,
             edge_attr=edge_attr,
             y_impute=y_impute,
             y_pheno=y_pheno,
-            node_degree=node_degree,
-            node_len=node_len,
         )
         return data
 
     def get_loader(self, data: Data, batch_size: int = 2000, max_subgraphs: int = None):
         """
         Splits the chromosome graph into sequential subgraphs with a random starting
-        offset so batch boundaries differ each epoch. Sequential slicing is correct for
-        pangenome GFAs because consecutive node IDs ARE adjacent in the reference backbone
-        — this preserves real bubble/branch edges within each batch.
-
-        NeighborLoader was removed: it requires 'pyg-lib' or 'torch-sparse' which are
-        not available in the Docker image. This pure-PyTorch approach has no external deps.
-
-        All nodes in each subgraph are seed nodes (no context dilution), so loss is
-        computed over the full batch without masking.
+        offset so batch boundaries differ each epoch. Sequential slicing preserves
+        real bubble/branch edges within each batch since consecutive node IDs in
+        vg-construct graphs ARE adjacent in the reference backbone.
         """
         import random as _rnd
         num_nodes = data.num_nodes
         subgraphs = []
 
-        # Random offset so we get different batch boundaries each epoch
+        # Random offset for batch diversity across epochs
         offset = _rnd.randint(0, max(0, batch_size - 1))
 
         for start in range(offset, num_nodes, batch_size):
@@ -108,34 +163,19 @@ class PangenomeDataset:
             end = min(start + batch_size, num_nodes)
             batch_nodes = torch.arange(start, end)
             sub = data.subgraph(batch_nodes)
-
-            # Explicitly carry node_degree and node_len (custom attrs — subgraph() may skip them)
-            if hasattr(data, 'node_degree') and data.node_degree is not None:
-                sub.node_degree = data.node_degree[batch_nodes]
-            if hasattr(data, 'node_len') and data.node_len is not None:
-                sub.node_len = data.node_len[batch_nodes]
-
             if sub.edge_index.numel() > 0:
                 subgraphs.append(sub)
 
-        # Also include the initial offset chunk (nodes 0..offset-1) if any
+        # Include the initial offset chunk
         if offset > 0:
             batch_nodes = torch.arange(0, offset)
             sub = data.subgraph(batch_nodes)
-            if hasattr(data, 'node_degree') and data.node_degree is not None:
-                sub.node_degree = data.node_degree[batch_nodes]
-            if hasattr(data, 'node_len') and data.node_len is not None:
-                sub.node_len = data.node_len[batch_nodes]
             if sub.edge_index.numel() > 0:
                 subgraphs.append(sub)
 
         if not subgraphs:
             fallback_nodes = torch.arange(0, min(batch_size, num_nodes))
             fallback = data.subgraph(fallback_nodes)
-            if hasattr(data, 'node_degree') and data.node_degree is not None:
-                fallback.node_degree = data.node_degree[fallback_nodes]
-            if hasattr(data, 'node_len') and data.node_len is not None:
-                fallback.node_len = data.node_len[fallback_nodes]
             subgraphs.append(fallback)
 
         return subgraphs

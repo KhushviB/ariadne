@@ -125,7 +125,7 @@ def generate_thesis_extras():
     start_loss = 2.45
     if test_path:
         try:
-            model = PanGNNModel(num_vocab=6, embed_dim=16, hidden_dim=32, edge_dim=1, heads=2)
+            model = PanGNNModel(input_dim=71, hidden_dim=32, edge_dim=1, heads=2)
             chr_data = torch.load(test_path, map_location=torch.device('cpu'))
             ds = PangenomeDataset()
             loader = ds.get_loader(chr_data, batch_size=2000)
