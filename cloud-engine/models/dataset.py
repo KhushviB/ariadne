@@ -8,21 +8,22 @@ class PangenomeDataset:
     PanGNN v2 Dataset Builder.
     
     Translates parsed GFA components into PyG Data matrices with:
-    - 3-mer frequency features (64 dims) over full node sequences
+    - 4-mer frequency features (256 dims) over full node sequences
     - Bubble-Aware Positional Encoding (BAPE, 5 dims)
     - Log-scaled node degree (1 dim)
-    - Log-scaled sequence length (1 dim)
+    - Log-scaled absolute sequence length (1 dim)
+    - Bubble-relative path sequence length (1 dim)
     - Bidirectional edges with edge-type encoding
     
-    Total node feature dimensionality: 71
+    Total node feature dimensionality: 264
     """
     
     BASE_MAP = {'A': 0, 'T': 1, 'G': 2, 'C': 3}
-    K = 3
-    KMER_DIM = 4 ** K  # 64 for 3-mers
+    K = 4
+    KMER_DIM = 4 ** K  # 256 for 4-mers
     
     def compute_kmer_freqs(self, seq: str) -> list:
-        """Compute normalized 3-mer frequency vector over the full node sequence."""
+        """Compute normalized 4-mer frequency vector over the full node sequence."""
         counts = [0] * self.KMER_DIM
         seq_upper = seq.upper()
         n = len(seq_upper)
@@ -57,38 +58,59 @@ class PangenomeDataset:
         node_id_map = {n['id']: idx for idx, n in enumerate(nodes)}
         num_nodes = len(nodes)
 
+        # ── Topology pre-computation ───────────────────────────────────────
+        in_degrees = {}
+        out_degrees = {}
+        for edge in edges:
+            src = edge['source']
+            tgt = edge['target']
+            out_degrees[src] = out_degrees.get(src, 0) + 1
+            in_degrees[tgt] = in_degrees.get(tgt, 0) + 1
+
         # ── Feature computation ────────────────────────────────────────────
-        kmer_list = []       # [num_nodes, 64]
-        bape_list = []       # [num_nodes, 5]
-        degree_list = []     # placeholder, computed after edge_index
-        length_list = []     # [num_nodes, 1]
-        node_freq = []       # label target
+        kmer_array = np.zeros((num_nodes, 256), dtype=np.float32)
+        bape_array = np.zeros((num_nodes, 9), dtype=np.float32)
+        length_array = np.zeros((num_nodes, 1), dtype=np.float32)
+        rel_length_array = np.zeros((num_nodes, 2), dtype=np.float32)
+        node_freq = np.zeros((num_nodes, 1), dtype=np.float32)
         
-        for node in nodes:
+        for idx, node in enumerate(nodes):
             seq = node.get('sequence', '')
             
-            # 1. K-mer frequency features (64 dims)
-            kmer_list.append(self.compute_kmer_freqs(seq))
+            # 1. K-mer frequency features (256 dims)
+            kmer_array[idx, :] = self.compute_kmer_freqs(seq)
             
-            # 2. BAPE — Bubble-Aware Positional Encoding (5 dims)
-            bape = [
+            # 2. BAPE — Bubble-Aware Positional Encoding & Topology (9 dims)
+            nid = node.get('id', '')
+            bape_array[idx, :] = [
                 1.0 if node.get('is_source', False) else 0.0,
                 1.0 if node.get('is_sink', False) else 0.0,
                 1.0 if node.get('is_interior', False) else 0.0,
                 float(node.get('path_position', 0.0)),
                 math.log1p(float(node.get('n_paths', 0))),
+                math.log1p(float(node.get('bubble_depth', 0))),
+                math.log1p(float(node.get('dist_to_sink', 0))),
+                math.log1p(float(in_degrees.get(nid, 0))),
+                math.log1p(float(out_degrees.get(nid, 0))),
             ]
-            bape_list.append(bape)
             
             # 3. Log-scaled sequence length (1 dim)
-            length_list.append([math.log1p(len(seq))])
+            length_array[idx, 0] = math.log1p(len(seq))
             
-            # 4. Label
-            node_freq.append(node.get('frequency', 1.0))
+            # 4. Bubble-relative path sequence length (2 dims)
+            path_seq_len = float(node.get('path_seq_len', 0))
+            max_path_seq_len = float(max(1, node.get('max_path_seq_len', 1)))
+            avg_path_seq_len = float(max(1, node.get('avg_path_seq_len', 1)))
+            rel_length_array[idx, 0] = path_seq_len / max_path_seq_len
+            rel_length_array[idx, 1] = path_seq_len / avg_path_seq_len
+            
+            # 5. Label
+            node_freq[idx, 0] = node.get('frequency', 1.0)
 
-        kmer_tensor = torch.tensor(kmer_list, dtype=torch.float)    # [N, 64]
-        bape_tensor = torch.tensor(bape_list, dtype=torch.float)    # [N, 5]
-        length_tensor = torch.tensor(length_list, dtype=torch.float) # [N, 1]
+        kmer_tensor = torch.from_numpy(kmer_array)
+        bape_tensor = torch.from_numpy(bape_array)
+        length_tensor = torch.from_numpy(length_array)
+        rel_length_tensor = torch.from_numpy(rel_length_array)
         
         # ── Edge construction (bidirectional) ──────────────────────────────
         edge_sources = []
@@ -121,17 +143,18 @@ class PangenomeDataset:
         deg = pyg_degree(edge_index[0], num_nodes=num_nodes)
         node_degree = torch.log1p(deg.float()).unsqueeze(1)  # [N, 1]
         
-        # ── Assemble full feature matrix (71 dims) ────────────────────────
-        # [kmer_64 | bape_5 | degree_1 | length_1] = 71
+        # ── Assemble full feature matrix (269 dims) ────────────────────────
+        # [kmer_256 | bape_9 | degree_1 | abs_len_1 | rel_len_2] = 269
         x_features = torch.cat([
-            kmer_tensor,     # 64
-            bape_tensor,     # 5
-            node_degree,     # 1
-            length_tensor,   # 1
-        ], dim=-1)  # [N, 71]
+            kmer_tensor,        # 256
+            bape_tensor,        # 9
+            node_degree,        # 1
+            length_tensor,      # 1
+            rel_length_tensor   # 2
+        ], dim=-1)  # [N, 269]
 
         # ── Labels ────────────────────────────────────────────────────────
-        y_impute = torch.tensor(node_freq, dtype=torch.float).unsqueeze(-1)
+        y_impute = torch.from_numpy(node_freq)
         y_pheno = y_impute * 2.5
 
         data = Data(

@@ -36,18 +36,31 @@ def load_checkpoint(checkpoint_path, model, optimizer, device):
     print(f"Resuming from epoch {epoch} (loss: {loss:.4f})")
     return epoch, loss
 
-def focal_loss(pred, target, pos_weight, gamma=2.0, eps=1e-7):
+def balanced_bce_loss(pred, target, eps=1e-7):
     """
-    Focal loss for extreme class imbalance.
-    Downweights easy negatives (the 31:1 majority) so the model
-    focuses gradient on hard positives (SV nodes).
+    Computes masked Binary Cross Entropy loss after dynamically undersampling 
+    the negative class to achieve a 1:1 ratio with the positive class.
     """
     pred = pred.clamp(eps, 1.0 - eps)
-    bce_pos = -torch.log(pred)
-    bce_neg = -torch.log(1.0 - pred)
-    focal_pos = pos_weight * target * ((1.0 - pred) ** gamma) * bce_pos
-    focal_neg = (1.0 - target) * (pred ** gamma) * bce_neg
-    return (focal_pos + focal_neg).mean()
+    bce = -target * torch.log(pred) - (1.0 - target) * torch.log(1.0 - pred)
+    
+    with torch.no_grad():
+        pos_mask = (target == 1.0)
+        neg_mask = (target == 0.0)
+        
+        num_pos = pos_mask.sum().item()
+        num_neg = neg_mask.sum().item()
+        
+        if num_neg > num_pos and num_pos > 0:
+            keep_prob = num_pos / float(num_neg)
+            sampled_neg_mask = neg_mask & (torch.rand_like(target) < keep_prob)
+        else:
+            sampled_neg_mask = neg_mask
+            
+        train_mask = pos_mask | sampled_neg_mask
+
+    masked_loss = bce * train_mask
+    return masked_loss.sum() / max(1.0, train_mask.sum().item())
 
 def train_model(data_dir=None, checkpoint_dir=None, epochs=50, batch_size=2000, lr=0.0005):
     """Executes PanGNN v2 training loop with superbubble-aware features."""
@@ -116,11 +129,7 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=50, batch_size=2000, 
             input_dim = data.x.shape[1]  # Detect actual feature dim
         except Exception:
             pass
-            
-    global_pos_weight = 1.0
-    if global_pos > 0:
-        global_pos_weight = global_neg / global_pos
-    print(f"Global distribution: Positives={int(global_pos)}, Negatives={int(global_neg)}, Ratio={global_pos_weight:.2f}:1", flush=True)
+            print(f"Global distribution: Positives={int(global_pos)}, Negatives={int(global_neg)}", flush=True)
     print(f"Input feature dimension: {input_dim}", flush=True)
 
     # 2. Model setup — PanGNN v2 (no embeddings, continuous features)
@@ -185,7 +194,7 @@ def train_model(data_dir=None, checkpoint_dir=None, epochs=50, batch_size=2000, 
                         neg_pred_sum += prob[neg_mask].sum().item()
                         neg_pred_count += neg_mask.sum().item()
 
-                    loss = focal_loss(impute_prob, is_pos, global_pos_weight)
+                    loss = balanced_bce_loss(impute_prob, is_pos)
                     loss.backward()
                     
                     # Gradient clipping to prevent explosion

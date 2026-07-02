@@ -85,15 +85,15 @@ class PanGNNModel(nn.Module):
     PanGNN v2: Bubble-Aware Graph Attention Network for Pangenome Variant Detection.
     
     Architecture:
-    - Feature encoder: projects 71-dim input (64 kmer + 5 BAPE + 1 degree + 1 length)
+    - Feature encoder: projects 264-dim input (256 kmer + 5 BAPE + 1 degree + 1 abs_len + 1 rel_len)
       to hidden_dim through a 2-layer MLP
     - 3 P-GAT layers with residual connections for 3-hop receptive field
     - Classification head: binary ref vs alt allele prediction
     """
-    def __init__(self, input_dim: int = 71, hidden_dim: int = 128, edge_dim: int = 1, heads: int = 4):
+    def __init__(self, input_dim: int = 264, hidden_dim: int = 128, edge_dim: int = 1, heads: int = 4):
         super(PanGNNModel, self).__init__()
         
-        # Feature encoder: projects heterogeneous 71-dim features to hidden_dim
+        # Feature encoder: projects heterogeneous 264-dim features to hidden_dim
         self.feature_encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ELU(),

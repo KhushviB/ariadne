@@ -115,7 +115,7 @@ def detect_superbubbles(adj, all_node_ids):
     return bubbles
 
 
-def compute_bubble_metadata(bubbles):
+def compute_bubble_metadata(bubbles, node_lengths):
     """
     Computes per-node bubble metadata from detected superbubbles.
     
@@ -133,6 +133,14 @@ def compute_bubble_metadata(bubbles):
         sink = bubble['sink']
         n_paths = bubble['n_paths']
         
+        # Calculate sequence length of each path
+        path_lengths = []
+        for path in bubble['paths']:
+            seq_len = sum(node_lengths.get(nid, 0) for nid in path)
+            path_lengths.append(seq_len)
+        max_path_len = max(path_lengths) if path_lengths else 0
+        avg_path_len = (sum(path_lengths) / max(1, len(path_lengths))) if path_lengths else 0
+        
         # Mark source (topological role — always degree >= 3)
         if source not in node_meta:
             node_meta[source] = {
@@ -142,6 +150,11 @@ def compute_bubble_metadata(bubbles):
                 'is_interior': False,
                 'n_paths': n_paths,
                 'path_position': 0.0,
+                'path_seq_len': 0,
+                'max_path_seq_len': max_path_len,
+                'avg_path_seq_len': avg_path_len,
+                'bubble_depth': 0,
+                'dist_to_sink': 0,
             }
         
         # Mark sink (topological role — always degree >= 3)
@@ -153,11 +166,17 @@ def compute_bubble_metadata(bubbles):
                 'is_interior': False,
                 'n_paths': n_paths,
                 'path_position': 1.0,
+                'path_seq_len': 0,
+                'max_path_seq_len': max_path_len,
+                'avg_path_seq_len': avg_path_len,
+                'bubble_depth': 0,
+                'dist_to_sink': 0,
             }
         
         # Mark ALL interior nodes on ALL paths (both ref and alt alleles)
-        for path in bubble['paths']:
+        for path_idx, path in enumerate(bubble['paths']):
             path_len = len(path)
+            seq_len = path_lengths[path_idx]
             for i, nid in enumerate(path):
                 if nid not in node_meta:
                     pos = (i + 1) / max(path_len + 1, 2)
@@ -168,6 +187,11 @@ def compute_bubble_metadata(bubbles):
                         'is_interior': True,
                         'n_paths': n_paths,
                         'path_position': pos,
+                        'path_seq_len': seq_len,
+                        'max_path_seq_len': max_path_len,
+                        'avg_path_seq_len': avg_path_len,
+                        'bubble_depth': i + 1,
+                        'dist_to_sink': path_len - i,
                     }
     
     return node_meta
@@ -258,7 +282,8 @@ def parse_gfa(gfa_path):
     print(f"[GFA PARSER] Detected {len(bubbles)} superbubbles.", flush=True)
     
     # 3. Compute per-node bubble metadata (same encoding for ref AND alt alleles)
-    bubble_meta = compute_bubble_metadata(bubbles)
+    node_lengths = {nid: len(seq) for nid, seq in raw_nodes}
+    bubble_meta = compute_bubble_metadata(bubbles, node_lengths)
     
     # Count how many interior nodes are ref vs alt for diagnostic purposes
     ref_path_set = set(ref_path_nodes)
@@ -290,6 +315,8 @@ def parse_gfa(gfa_path):
             'is_interior': False,
             'n_paths': 0,
             'path_position': 0.0,
+            'path_seq_len': 0,
+            'max_path_seq_len': 0,
         })
         
         nodes.append({
@@ -303,6 +330,8 @@ def parse_gfa(gfa_path):
             "is_interior": meta['is_interior'],
             "n_paths": meta['n_paths'],
             "path_position": meta['path_position'],
+            "path_seq_len": meta['path_seq_len'],
+            "max_path_seq_len": meta['max_path_seq_len'],
         })
 
     print(f"[GFA PARSER] Labeling complete. Reference: {ref_count}, Alternative: {alt_count}", flush=True)
