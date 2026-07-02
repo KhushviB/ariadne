@@ -16,14 +16,18 @@ The project is structured as a hybrid monorepo, separating lightweight visualiza
 
 Unlike standard graph convolutional layers, PanGNN implements a custom **Path-Aware Graph Attention (P-GAT)** model that operates on topology-derived features to prevent label leakage. The architecture features:
 
-1.  **Topology-Only Superbubble Detection**: Identifies genomic variations purely by graph structure (degree $\ge$ 3 branching), ensuring the model learns sequence patterns rather than memorizing the reference path.
+1.  **Topology-Only Superbubble Detection**: Identifies genomic variations purely by graph structure (degree >= 3 branching), ensuring the model learns sequence patterns rather than memorizing the reference path.
 2.  **71-Dimensional Feature Encoding**: Each node is embedded using:
     *   64-dim 3-mer sequence frequency composition.
     *   5-dim Bubble-Aware Positional Encoding (BAPE) representing topological roles (source, sink, interior, path position, parallel paths).
     *   Log-scaled node degree and sequence length.
 3.  **3-Layer Bidirectional Message Passing**:
-    $$h_v^{(l+1)} = \sigma \left( \mathbf{W}^{(l)} h_v^{(l)} + \sum_{u \in \mathcal{N}(v)} \alpha_{uv}^{(l)} \mathbf{M}^{(l)}(h_u^{(l)}, \mathbf{e}_{uv}) \right)$$
-    Where $\mathbf{e}_{uv}$ encodes edge types (backbone vs. branch).
+
+```math
+h_v^{(l+1)} = \sigma \left( \mathbf{W}^{(l)} h_v^{(l)} + \sum_{u \in \mathcal{N}(v)} \alpha_{uv}^{(l)} \mathbf{M}^{(l)}(h_u^{(l)}, \mathbf{e}_{uv}) \right)
+```
+
+Where `e_{uv}` encodes edge types (backbone vs. branch).
 
 ---
 
